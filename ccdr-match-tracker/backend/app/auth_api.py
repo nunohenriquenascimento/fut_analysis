@@ -10,6 +10,7 @@ from app.auth_schemas import AuthRead, Login, UserCreate, UserRead, UserUpdate
 from app.config import get_settings
 from app.enums import UserRole
 from app.models import AuthSession, LoginThrottle, User
+from app import auth_debug
 
 router = APIRouter(tags=["authentication"])
 
@@ -20,8 +21,10 @@ def no_cache(response: Response) -> None:
 
 @router.post("/auth/login", response_model=AuthRead)
 def login(payload: Login, request: Request, response: Response, db: Database):
+    auth_debug.fields(request, email_masked='***')
     trusted_origin(request)
     if request.headers.get("x-requested-with") != "CCDR":
+        auth_debug.fields(request, reason='login_request_invalid')
         raise HTTPException(403, "Pedido de login inválido.")
     lock_users(db)
     instant = now()
@@ -37,18 +40,25 @@ def login(payload: Login, request: Request, response: Response, db: Database):
             bucket.attempts = 0
             bucket.resets_at = instant + timedelta(minutes=15)
         if bucket.attempts >= limit:
+            auth_debug.fields(request, reason='login_throttled')
             db.rollback()
             raise HTTPException(429, "Demasiadas tentativas. Tente novamente dentro de 15 minutos.", headers={"Retry-After": "900"})
         bucket.attempts += 1
     user = db.scalar(select(User).where(func.lower(User.email) == payload.email))
     valid = verify_password(payload.password.get_secret_value(), user.password_hash if user else None)
     if not valid or user is None or not user.is_active:
+        auth_debug.fields(request, credentials_valid=False, reason='credentials_rejected')
         db.commit()
         raise HTTPException(401, "Email ou password inválidos.")
     # Replace the browser's previous session; never reuse an identifier from a request.
     previous = request.cookies.get(cookie_name())
+    replaced_hashes = []
     if previous:
-        db.execute(delete(AuthSession).where(AuthSession.token_hash == digest(previous)))
+        deletion = delete(AuthSession).where(AuthSession.token_hash == digest(previous))
+        if get_settings().auth_debug_logging:
+            replaced_hashes = list(db.scalars(deletion.returning(AuthSession.token_hash)))
+        else:
+            db.execute(deletion)
     db.execute(delete(AuthSession).where(AuthSession.expires_at <= instant))
     db.execute(delete(LoginThrottle).where(LoginThrottle.resets_at <= instant))
     token, csrf = secrets.token_urlsafe(32), secrets.token_hex(32)
@@ -57,8 +67,12 @@ def login(payload: Login, request: Request, response: Response, db: Database):
                        expires_at=instant + timedelta(hours=hours)))
     result = AuthRead(user=UserRead.model_validate(user), csrf_token=csrf)
     db.commit()
+    auth_debug.remember_revoked(replaced_hashes)
     response.set_cookie(cookie_name(), token, max_age=hours * 3600, httponly=True,
                         secure=get_settings().auth_cookie_secure, samesite=get_settings().auth_cookie_samesite, path="/")
+    auth_debug.fields(request, credentials_valid=True, session_created=True, user_id=user.id, role=user.role.value,
+                      reason='authenticated', cookie_max_age_present=True, cookie_expires_present=False,
+                      session_db_id_logged=False)
     no_cache(response)
     return result
 
@@ -71,8 +85,10 @@ def me(request: Request, response: Response, user: CurrentUser):
 
 @router.post("/auth/logout", status_code=204)
 def logout(request: Request, response: Response, db: Database, user: CurrentUser):
+    revoked_hash = request.state.auth_session.token_hash
     db.delete(request.state.auth_session)
     db.commit()
+    auth_debug.remember_revoked([revoked_hash])
     response.delete_cookie(cookie_name(), path="/", secure=get_settings().auth_cookie_secure, httponly=True, samesite=get_settings().auth_cookie_samesite)
     no_cache(response)
 
@@ -101,6 +117,7 @@ def create_user(payload: UserCreate, db: Database, admin: Admin):
 def update_user(user_id: int, payload: UserUpdate, db: Database, admin: Admin):
     # current_user holds the same advisory lock as bootstrap and all writers.
     try:
+        revoked_hashes = []
         user = db.scalar(select(User).where(User.id == user_id).with_for_update())
         if user is None:
             raise HTTPException(404, "Utilizador não encontrado.")
@@ -117,10 +134,13 @@ def update_user(user_id: int, payload: UserUpdate, db: Database, admin: Admin):
         if payload.password is not None:
             user.password_hash = hash_password(payload.password.get_secret_value())
         if payload.model_fields_set & {"password", "role", "is_active", "email"}:
+            if get_settings().auth_debug_logging:
+                revoked_hashes = list(db.scalars(select(AuthSession.token_hash).where(AuthSession.user_id == user.id).limit(1024)))
             db.execute(delete(AuthSession).where(AuthSession.user_id == user.id))
         db.flush()
         result = UserRead.model_validate(user)
         db.commit()
+        auth_debug.remember_revoked(revoked_hashes)
         return result
     except IntegrityError:
         db.rollback()

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = False
     auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     auth_session_hours: int = 8
+    auth_debug_logging: bool = False
 
     @field_validator("auth_session_hours")
     @classmethod

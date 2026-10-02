@@ -11,6 +11,7 @@ from app.statistics_api import router as statistics_router
 from app.config import get_settings
 from app.auth_api import router as auth_router
 from app.live_socket import router as socket_router
+from app.auth_debug import middleware as auth_debug_middleware
 
 app = FastAPI(title="CCDR Vila Cortez do Mondego — Sub-19", version="0.1.0")
 app.add_middleware(
@@ -19,12 +20,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
     allow_headers=["Content-Type", "X-CSRF-Token", "X-Requested-With"],
+    expose_headers=["X-Request-ID"],
 )
 app.include_router(auth_router)
 app.include_router(router)
 app.include_router(live_router)
 app.include_router(statistics_router)
 app.include_router(socket_router)
+app.middleware("http")(auth_debug_middleware)
 
 
 @app.middleware("http")

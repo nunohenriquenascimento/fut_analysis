@@ -1,5 +1,6 @@
 // Central HTTP boundary. Future screens should use this module instead of
 // scattering URLs and fetch calls throughout components.
+import { authDebug, authApiOrigin } from "./auth-debug";
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 let csrfToken: string | null = null;
 export function setCsrfToken(token: string | null) { csrfToken = token; }
@@ -79,13 +80,20 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const diagnostic = ["/auth/login", "/auth/me", "/auth/logout"].includes(path);
+  if (diagnostic) { authApiOrigin(API_URL); authDebug(path, "request"); }
+  let response: Response;
+  try { response = await fetch(`${API_URL}${path}`, {
     ...init,
     cache: "no-store",
     credentials: "include",
     headers: { "Content-Type": "application/json", "X-Requested-With": "CCDR",
       ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}), ...init?.headers },
-  });
+  }); } catch (reason) {
+    if (diagnostic) authDebug(path, "fetch_error");
+    throw reason;
+  }
+  if (diagnostic) authDebug(path, "response", { status: response.status, request_id: response.headers.get("X-Request-ID") });
   if (!response.ok) {
     if (response.status === 401 && path !== "/auth/login" && path !== "/auth/me" && typeof window !== "undefined") {
       setCsrfToken(null);

@@ -4,6 +4,8 @@ Base de uma aplicação mobile-first de registo de jogos. Frontend Next.js/TypeS
 
 ## Estado desta fase
 
+Diagnóstico temporário de login mobile, opt-in e sem secrets: [AUTH_MOBILE_DIAGNOSTICO.md](AUTH_MOBILE_DIAGNOSTICO.md). Flags backend/frontend desligadas por defeito; estratégia de autenticação preservada.
+
 Preparação de produção Vercel + Railway (API/WebSockets/PostgreSQL), com HTTPS, cookies configuráveis e um worker: [PRODUCAO_DEPLOY.md](PRODUCAO_DEPLOY.md). Deployment e migrações de produção são manuais; nenhum serviço foi publicado nesta preparação.
 
 ADMIN dispõe ainda de **Eliminar jogo e dados associados**, numa área destrutiva separada, com confirmação reforçada e endpoint `DELETE /matches/{match_id}/force`. O DELETE seguro original mantém todas as restrições. Ver [JOGOS_ELIMINACAO_FORCADA_VALIDACAO.md](JOGOS_ELIMINACAO_FORCADA_VALIDACAO.md).
