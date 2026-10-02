@@ -1,3 +1,4 @@
+from app.auth import current_user, require_editor
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +13,7 @@ from app.match_service import get_match, resolve_opponent, read_squad, replace_s
 from app.roster import CLUB_NAME, SEASON_NAME
 from app.live_schemas import MatchDetailRead
 from app.live_service import events, score, protect_event_players
+from app.schemas import TeamRead, TeamMediaUpdate
 
 router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
@@ -29,7 +31,7 @@ def require_references(db: Session, season_id: int, *team_ids: int) -> None:
             raise HTTPException(404, "Equipa não encontrada.")
 
 
-def save(db: Session, record: Player | Match) -> Player | Match:
+def save(db: Session, record: Player | Match | Team) -> Player | Match | Team:
     db.add(record)
     try:
         db.commit()
@@ -48,16 +50,30 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/players/context", response_model=RosterContext, tags=["players"])
+@router.get("/players/context", response_model=RosterContext, tags=["players"], dependencies=[Depends(current_user)])
 def roster_context(db: Database):
     season = db.scalar(select(Season).where(Season.name == SEASON_NAME))
     team = db.scalar(select(Team).where(Team.name == CLUB_NAME))
     if season is None or team is None:
         raise HTTPException(404, "Plantel não configurado. Execute python -m app.seed no backend.")
-    return RosterContext(season_id=season.id, season_name=season.name, team_id=team.id, team_name=team.name)
+    return RosterContext(season_id=season.id, season_name=season.name, team_id=team.id, team_name=team.name, team_crest_path=team.crest_path)
 
 
-@router.get("/players", response_model=list[PlayerRead], tags=["players"])
+@router.get("/teams", response_model=list[TeamRead], tags=["teams"], dependencies=[Depends(current_user)])
+def list_teams(db: Database, limit: Limit = 100, offset: Offset = 0):
+    return db.scalars(select(Team).order_by(Team.name, Team.id).limit(limit).offset(offset)).all()
+
+
+@router.patch("/teams/{team_id}", response_model=TeamRead, tags=["teams"], dependencies=[Depends(require_editor)])
+def update_team_media(team_id: int, payload: TeamMediaUpdate, db: Database):
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(404, "Equipa não encontrada.")
+    team.crest_path = payload.crest_path
+    return save(db, team)
+
+
+@router.get("/players", response_model=list[PlayerRead], tags=["players"], dependencies=[Depends(current_user)])
 def list_players(db: Database, season_id: SeasonFilter = None, team_id: TeamFilter = None,
                  limit: Limit = 100, offset: Offset = 0):
     statement = select(Player).order_by(Player.name, Player.id)
@@ -68,13 +84,13 @@ def list_players(db: Database, season_id: SeasonFilter = None, team_id: TeamFilt
     return db.scalars(statement.limit(limit).offset(offset)).all()
 
 
-@router.post("/players", response_model=PlayerRead, status_code=201, tags=["players"])
+@router.post("/players", response_model=PlayerRead, status_code=201, tags=["players"], dependencies=[Depends(require_editor)])
 def create_player(payload: PlayerCreate, db: Database):
     require_references(db, payload.season_id, payload.team_id)
     return save(db, Player(**payload.model_dump()))
 
 
-@router.patch("/players/{player_id}", response_model=PlayerRead, tags=["players"])
+@router.patch("/players/{player_id}", response_model=PlayerRead, tags=["players"], dependencies=[Depends(require_editor)])
 def update_player(player_id: int, payload: PlayerUpdate, db: Database):
     player = db.get(Player, player_id)
     if player is None:
@@ -84,7 +100,7 @@ def update_player(player_id: int, payload: PlayerUpdate, db: Database):
     return save(db, player)
 
 
-@router.get("/matches", response_model=list[MatchRead], tags=["matches"])
+@router.get("/matches", response_model=list[MatchRead], tags=["matches"], dependencies=[Depends(current_user)])
 def list_matches(db: Database, season_id: SeasonFilter = None, team_id: TeamFilter = None,
                  limit: Limit = 100, offset: Offset = 0):
     statement = select(Match).order_by(Match.kickoff_at.desc(), Match.id.desc())
@@ -95,7 +111,7 @@ def list_matches(db: Database, season_id: SeasonFilter = None, team_id: TeamFilt
     return db.scalars(statement.limit(limit).offset(offset)).all()
 
 
-@router.post("/matches", response_model=MatchRead, status_code=201, tags=["matches"])
+@router.post("/matches", response_model=MatchRead, status_code=201, tags=["matches"], dependencies=[Depends(require_editor)])
 def create_match(payload: MatchCreate, db: Database):
     try:
         require_references(db, payload.season_id, payload.team_id)
@@ -113,13 +129,13 @@ def create_match(payload: MatchCreate, db: Database):
         raise
 
 
-@router.get("/matches/{match_id}", response_model=MatchDetailRead, tags=["matches"])
+@router.get("/matches/{match_id}", response_model=MatchDetailRead, tags=["matches"], dependencies=[Depends(current_user)])
 def match_detail(match_id: int, db: Database):
     match = get_match(db, match_id, lock=True)
     return MatchDetailRead(**MatchRead.model_validate(match).model_dump(), score=score(events(db, match_id)))
 
 
-@router.patch("/matches/{match_id}", response_model=MatchRead, tags=["matches"])
+@router.patch("/matches/{match_id}", response_model=MatchRead, tags=["matches"], dependencies=[Depends(require_editor)])
 def update_match(match_id: int, payload: MatchUpdate, db: Database):
     try:
         match = get_match(db, match_id, lock=True)
@@ -137,12 +153,12 @@ def update_match(match_id: int, payload: MatchUpdate, db: Database):
         raise
 
 
-@router.get("/matches/{match_id}/squad", response_model=list[SquadPlayer], tags=["matches"])
+@router.get("/matches/{match_id}/squad", response_model=list[SquadPlayer], tags=["matches"], dependencies=[Depends(current_user)])
 def match_squad(match_id: int, db: Database):
     return read_squad(db, get_match(db, match_id))
 
 
-@router.put("/matches/{match_id}/squad", response_model=list[SquadPlayer], tags=["matches"])
+@router.put("/matches/{match_id}/squad", response_model=list[SquadPlayer], tags=["matches"], dependencies=[Depends(require_editor)])
 def put_match_squad(match_id: int, payload: SquadReplace, db: Database):
     try:
         match = get_match(db, match_id, lock=True)

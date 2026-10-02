@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.enums import MatchStatus, PlayerPosition
+from app.media import AssetPath
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 PositiveId = Annotated[int, Field(gt=0)]
@@ -19,6 +20,7 @@ class PlayerCreate(InputModel):
     team_id: PositiveId
     position: PlayerPosition
     shirt_number: int = Field(ge=1, le=99, strict=True)
+    photo_path: AssetPath | None = None
 
 
 class PlayerRead(PlayerCreate):
@@ -35,12 +37,13 @@ class PlayerUpdate(InputModel):
     shirt_number: int | None = Field(default=None, ge=1, le=99, strict=True)
     position: PlayerPosition | None = None
     is_active: bool | None = Field(default=None, strict=True)
+    photo_path: AssetPath | None = None
 
     @model_validator(mode="after")
     def require_non_null_changes(self) -> "PlayerUpdate":
         if not self.model_fields_set:
             raise ValueError("Indique pelo menos um campo para atualizar.")
-        if any(getattr(self, field) is None for field in self.model_fields_set):
+        if any(getattr(self, field) is None for field in self.model_fields_set - {"photo_path"}):
             raise ValueError("Os campos enviados não podem ser nulos.")
         return self
 
@@ -50,6 +53,18 @@ class RosterContext(BaseModel):
     season_name: str
     team_id: int
     team_name: str
+    team_crest_path: str | None = None
+
+
+class TeamRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    crest_path: str | None = None
+
+
+class TeamMediaUpdate(InputModel):
+    crest_path: AssetPath | None
 
 
 TeamName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=160)]
@@ -99,6 +114,8 @@ class MatchRead(BaseModel):
     team_id: int
     opponent_id: int
     opponent_name: str
+    team_crest_path: str | None = None
+    opponent_crest_path: str | None = None
     matchday: int | None
     kickoff_at: datetime
     is_home: bool

@@ -140,7 +140,7 @@ def test_missing_player_context_and_patch_cors(roster):
     response = client.get("/players/context")
     assert response.status_code == 200
     assert response.json() == {"season_id": payload["season_id"], "team_id": payload["team_id"],
-                               "season_name": SEASON_NAME, "team_name": CLUB_NAME}
+                               "season_name": SEASON_NAME, "team_name": CLUB_NAME, "team_crest_path": None}
     response = client.options("/players/1", headers={"Origin": "http://localhost:3000",
         "Access-Control-Request-Method": "PATCH", "Access-Control-Request-Headers": "content-type"})
     assert response.status_code == 200

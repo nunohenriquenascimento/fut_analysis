@@ -12,6 +12,37 @@ from sqlalchemy.engine import make_url
 BACKEND = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def legacy_authorized_actor(request):
+    """Existing business regressions exercise rules as ADMIN; auth tests use real sessions."""
+    if request.path.name.startswith("test_auth"):
+        yield
+        return
+    from typing import Annotated
+    from fastapi import Depends
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+    from app.auth import current_user
+    from app.database import get_db
+    from app.enums import UserRole
+    from app.main import app
+    from app.models import User
+
+    def actor(db: Annotated[Session, Depends(get_db)]):
+        if db is None:
+            return User(id=1, name="Test admin", email="admin@test.local", role=UserRole.ADMIN, is_active=True)
+        user = db.scalar(select(User).where(User.email == "admin@test.local"))
+        if user is None:
+            user = User(name="Test admin", email="admin@test.local", role=UserRole.ADMIN, is_active=True)
+            db.add(user)
+            db.commit()
+        return user
+
+    app.dependency_overrides[current_user] = actor
+    yield
+    app.dependency_overrides.pop(current_user, None)
+
+
 def alembic(url, *args):
     return subprocess.run(
         [sys.executable, "-m", "alembic", *args], cwd=BACKEND,

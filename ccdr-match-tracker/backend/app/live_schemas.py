@@ -45,6 +45,7 @@ class EventRead(EventCreate):
     period: int
     elapsed_seconds: int
     created_at: datetime
+    recorded_by_id: int | None = None
 
 
 class Score(BaseModel):

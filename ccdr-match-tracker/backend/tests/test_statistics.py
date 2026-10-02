@@ -126,6 +126,48 @@ def test_edit_and_delete_events_recompute_all_statistics(games):
     assert client.get("/statistics/season").json()["rankings"]["shots_total"] == []
 
 
+def test_own_goal_edit_and_delete_recompute_match_season_and_players(games):
+    client, db, payload, ids = games
+    match = add_match(client, db, payload)
+    db.add_all([MatchSquad(match_id=match.id, player_id=ids[0], is_starter=True),
+                MatchSquad(match_id=match.id, player_id=ids[1])])
+    db.commit()
+    goal = add_event(db, match, "GOAL", player=ids[0], assist=ids[1])
+    path = f"/matches/{match.id}/events/{goal.id}"
+
+    def check(ours, theirs, wins, draws, losses, goals, assists, event_count):
+        game = client.get(f"/matches/{match.id}/stats").json()
+        season = client.get("/statistics/season").json()
+        players = client.get("/statistics/players").json()
+        assert game["score"] == {"us": ours, "opponent": theirs}
+        assert game["total_events"] == len(game["timeline"]) == event_count
+        assert season["competitive"] == {"matches": 1, "wins": wins, "draws": draws,
+            "losses": losses, "goals_for": ours, "goals_against": theirs,
+            "goal_difference": ours - theirs}
+        assert season["comparison"] == game["comparison"]
+        assert season["total_events"] == event_count
+        assert season["matches_with_events"] == event_count
+        assert players["players"] == season["players"]
+        assert players["rankings"] == season["rankings"]
+        totals = {row["player"]["id"]: row for row in players["players"]}
+        assert totals[ids[0]]["goals"] == goals
+        assert totals[ids[1]]["assists"] == assists
+        assert totals[ids[0]]["matches_called_up"] == totals[ids[0]]["matches_started"] == 1
+        assert totals[ids[1]]["matches_called_up"] == 1
+        for metric, player_id, value in [("goals", ids[0], goals), ("assists", ids[1], assists)]:
+            assert [(row["player_id"], row["value"]) for row in players["rankings"][metric]] == (
+                [(player_id, value)] if value else [])
+        assert all(not players["rankings"][metric] for metric in ["shots_total", "yellow_cards", "red_cards"])
+
+    check(1, 0, 1, 0, 0, 1, 1, 1)
+    assert client.patch(path, json={"event_type": "OWN_GOAL", "related_player_id": None}).status_code == 200
+    check(0, 1, 0, 0, 1, 0, 0, 1)
+    assert client.patch(path, json={"team": "OPPONENT", "player_id": None}).status_code == 200
+    check(1, 0, 1, 0, 0, 0, 0, 1)
+    assert client.delete(path).status_code == 200
+    check(0, 0, 0, 1, 0, 0, 0, 0)
+
+
 def test_empty_season_empty_match_and_missing_match(games):
     client, db, payload, _ = games
     data = client.get("/statistics/season").json()

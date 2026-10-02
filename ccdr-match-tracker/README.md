@@ -4,18 +4,19 @@ Base de uma aplicação mobile-first de registo de jogos. Frontend Next.js/TypeS
 
 ## Estado desta fase
 
-- A página inicial mantém o design original. Plantel abre `/players`; Jogos abre `/matches`. O detalhe `/matches/{match_id}` permite editar o jogo e guardar a convocatória.
+- Layout e media: identidade do CCDR com emblema real, paleta clara vermelha/azul/amarela centralizada, componentes partilhados e suporte a fotos/emblemas locais. Ver [LAYOUT_VALIDACAO.md](LAYOUT_VALIDACAO.md) para consultar cores, associar imagens e consultar a validação da migração `0005`.
+- Plantel abre `/players`; Jogos abre `/matches`. O detalhe `/matches/{match_id}` permite editar o jogo e guardar a convocatória.
 - API do Plantel preservada. Jogos: `GET/POST /matches`, `GET/PATCH /matches/{match_id}` e `GET/PUT /matches/{match_id}/squad`.
 - Jogo ao Vivo em `/matches/{match_id}/live`: relógio persistido, transições controladas, eventos, resultado derivado e timeline com edição/eliminação. Abrir pelo detalhe de um jogo; o botão inicial Jogo ao Vivo permite escolher o jogo.
 - Estatísticas em `/statistics` e `/matches/{match_id}/stats`: comparação por jogo, resumo competitivo da época, atividade, rankings e valores individuais. Calculadas a partir dos dados existentes, sem tabelas agregadas.
 - Modelos `User`, `Season`, `Team`, `Player`, `Match`, `MatchSquad` e `MatchEvent`.
 - Clientes tipados em `frontend/lib/api.ts`, `frontend/lib/live.ts` e `frontend/lib/statistics.ts`. O contexto resolve os IDs de equipa e época no backend.
 - Manifesto web e idioma português preparados. Ainda faltam ícones próprios, service worker, instalação validada e estratégia de sincronização offline para uma PWA completa.
-- Não existem autenticação, aplicação de permissões, WebSockets, sincronização multiutilizador ou estatísticas avançadas nesta fase. A API destina-se a desenvolvimento local; autenticação e autorização são necessárias antes da publicação para a equipa técnica.
+- Autenticação com cookie HttpOnly, sessões revogáveis, CSRF e papéis ADMIN/COACH/VIEWER. Gestão de contas em `/users`, apenas ADMIN; login em `/login`. Ver [AUTH_VALIDACAO.md](AUTH_VALIDACAO.md) para estratégia, permissões, testes e configuração HTTPS. DELETE/CANCEL de jogos permanece suspenso. Ainda não existem WebSockets ou sincronização offline.
 
 ## Estrutura
 
-O repositório Git existente está dentro de `frontend/`. O backend e este README estão fora desse repositório. Antes de publicar, decidir se o histórico será promovido para um único repositório na raiz ou se serão usados repositórios separados. Esta fase não move nem apaga o `.git` existente.
+O frontend tem um repositório Git próprio em `frontend/`. O backend e os documentos do projeto estão no repositório exterior de `SUB-19`. Esta fase não move nem apaga os repositórios existentes.
 
 ```text
 frontend/
@@ -91,6 +92,7 @@ Ainda na pasta `backend`, com o ambiente ativo:
 ```powershell
 python -m alembic upgrade head
 python -m app.seed
+python -m app.create_admin
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -123,8 +125,13 @@ Noutro terminal:
 
 ```powershell
 Invoke-RestMethod http://localhost:8000/health
-Invoke-RestMethod http://localhost:8000/players
-Invoke-RestMethod http://localhost:8000/matches
+$credential = Get-Credential -Message "Email e password CCDR"
+$loginBody = @{ email = $credential.UserName; password = $credential.GetNetworkCredential().Password } | ConvertTo-Json
+$auth = Invoke-RestMethod http://localhost:8000/auth/login -Method Post -ContentType "application/json; charset=utf-8" -Headers @{ Origin = "http://localhost:3000"; "X-Requested-With" = "CCDR" } -SessionVariable ccdrSession -Body ([System.Text.Encoding]::UTF8.GetBytes($loginBody))
+$authHeaders = @{ Origin = "http://localhost:3000"; "X-CSRF-Token" = $auth.csrf_token }
+Remove-Variable loginBody, credential
+Invoke-RestMethod http://localhost:8000/players -WebSession $ccdrSession -Headers $authHeaders
+Invoke-RestMethod http://localhost:8000/matches -WebSession $ccdrSession -Headers $authHeaders
 ```
 
 `/health` responde `{"status":"ok"}` e verifica apenas que o processo está ativo; não verifica a ligação ao PostgreSQL. As listagens devem devolver arrays vazios numa instalação nova.
@@ -132,7 +139,7 @@ Invoke-RestMethod http://localhost:8000/matches
 Criar um jogador com os IDs resolvidos pelo contexto:
 
 ```powershell
-$context = Invoke-RestMethod http://localhost:8000/players/context
+$context = Invoke-RestMethod http://localhost:8000/players/context -WebSession $ccdrSession -Headers $authHeaders
 $player = @{
     name = "Nome do jogador"
     season_id = $context.season_id
@@ -140,13 +147,13 @@ $player = @{
     position = "MC"
     shirt_number = 8
 } | ConvertTo-Json
-Invoke-RestMethod http://localhost:8000/players -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($player))
+Invoke-RestMethod http://localhost:8000/players -WebSession $ccdrSession -Headers $authHeaders -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($player))
 ```
 
 Para criar um jogo, usar `/matches` no browser ou enviar o nome do adversário à API. Uma equipa existente é reutilizada, ignorando maiúsculas e espaços redundantes; caso contrário, é criada sem plantel adversário:
 
 ```powershell
-$context = Invoke-RestMethod http://localhost:8000/players/context
+$context = Invoke-RestMethod http://localhost:8000/players/context -WebSession $ccdrSession -Headers $authHeaders
 $match = @{
     season_id = $context.season_id
     team_id = $context.team_id
@@ -156,7 +163,7 @@ $match = @{
     is_home = $true
     venue = "Campo de jogos"
 } | ConvertTo-Json
-Invoke-RestMethod http://localhost:8000/matches -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($match))
+Invoke-RestMethod http://localhost:8000/matches -WebSession $ccdrSession -Headers $authHeaders -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($match))
 ```
 
 IDs inexistentes devolvem 404; camisola repetida na mesma equipa/época devolve 409; dados inválidos devolvem 422; falha de ligação à base de dados devolve 503. As datas dos jogos exigem fuso horário. As listagens aceitam `season_id`, `team_id`, `limit` (1–200, padrão 100) e `offset` (padrão 0), por exemplo `/players?season_id=1&team_id=1&limit=25&offset=0`.
@@ -167,7 +174,7 @@ IDs inexistentes devolvem 404; camisola repetida na mesma equipa/época devolve 
 - `Team` é partilhada entre épocas e também identifica adversários; `team_id` no jogo é sempre a nossa equipa. `is_home` indica onde jogamos.
 - Uma linha `MatchSquad` representa um convocado; `is_starter` distingue titular de suplente. Não convocado corresponde à ausência de linha. O PUT substitui a convocatória numa transação e valida equipa, época, duplicados e estado ativo; jogadores anteriormente convocados permanecem visíveis se forem desativados.
 - `Match.matchday` guarda a jornada, obrigatória nos novos jogos. A migração `0003` mantém NULL nos jogos antigos sem jornada conhecida. O PATCH não altera equipa, época ou estado; todos os novos jogos começam em `SCHEDULED`.
-- Papéis: `ADMIN`, `COACH`, `VIEWER`; ainda sem controlo de acesso. Posições: `GR`, `DC`, `ALA`, `MDC`, `MC`, `PL`, `UNIVERSAL`.
+- Papéis: `ADMIN`, `COACH`, `VIEWER`, validados pelo backend em cada pedido. Posições: `GR`, `DC`, `ALA`, `MDC`, `MC`, `PL`, `UNIVERSAL`.
 - Estados preservados: `SCHEDULED`, `FIRST_HALF`, `HALF_TIME`, `SECOND_HALF`, `FINISHED`, `CANCELLED`. O serviço ao vivo permite apenas a sequência agendado → 1.ª parte → intervalo → 2.ª parte → terminado. Não há ação de cancelamento/reabertura nesta fase.
 - O relógio acumula tempo efetivamente jogado, incluindo compensação e excluindo intervalo. `clock_started_at` e `elapsed_seconds` persistidos permitem reconstruí-lo após refresh. O servidor calcula período e tempo dos eventos; o cliente não os envia. A timeline ordena por período, segundos e ID.
 - `player_id` identifica o marcador; `related_player_id` identifica a assistência opcional. Em substituições representam quem sai e quem entra, obrigatoriamente diferentes. Todos os jogadores associados têm de pertencer à equipa/época e convocatória. Ainda não há controlo de quem está em campo.

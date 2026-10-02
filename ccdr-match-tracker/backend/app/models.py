@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -16,9 +16,26 @@ class User(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(254), unique=True)
-    # No passwords or login yet. Authentication will be introduced separately.
+    __table_args__ = (Index("uq_users_email_normalized", func.lower(email), unique=True),)
+    # Legacy accounts cannot log in until an administrator sets a password.
+    password_hash: Mapped[str | None] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), default=UserRole.VIEWER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AuthSession(TimestampMixin, Base):
+    __tablename__ = "auth_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    csrf_token: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class LoginThrottle(Base):
+    __tablename__ = "login_throttles"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempts: Mapped[int] = mapped_column(Integer)
+    resets_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class Season(TimestampMixin, Base):
@@ -34,6 +51,7 @@ class Team(TimestampMixin, Base):
     __tablename__ = "teams"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160), unique=True)
+    crest_path: Mapped[str | None] = mapped_column(String(500))
 
 
 class Player(TimestampMixin, Base):
@@ -51,6 +69,8 @@ class Player(TimestampMixin, Base):
     shirt_number: Mapped[int | None]
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    photo_path: Mapped[str | None] = mapped_column(String(500))
+
 
 class Match(TimestampMixin, Base):
     __tablename__ = "matches"
@@ -66,6 +86,7 @@ class Match(TimestampMixin, Base):
     # Existing games may have no known matchday; new API writes require one.
     matchday: Mapped[int | None]
     opponent: Mapped[Team] = relationship(foreign_keys=[opponent_id], lazy="joined")
+    team: Mapped[Team] = relationship(foreign_keys=[team_id], lazy="joined")
     kickoff_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     is_home: Mapped[bool] = mapped_column(Boolean, default=True)
     venue: Mapped[str | None] = mapped_column(String(160))
@@ -77,6 +98,14 @@ class Match(TimestampMixin, Base):
     @property
     def opponent_name(self) -> str:
         return self.opponent.name
+
+    @property
+    def team_crest_path(self) -> str | None:
+        return self.team.crest_path
+
+    @property
+    def opponent_crest_path(self) -> str | None:
+        return self.opponent.crest_path
 
 
 class MatchSquad(TimestampMixin, Base):

@@ -1,4 +1,4 @@
-# Estatísticas — validação de 1 de outubro de 2026
+# Estatísticas — validação de 2 de outubro de 2026
 
 Estatísticas por jogo, jogador e época implementadas. Não foram alterados modelos, migrações ou lógica do Jogo ao Vivo. Sem novas dependências, tabelas agregadas, autenticação, multiutilizador, WebSockets, offline, mapas de remate, posse de bola, xG, percentagens avançadas ou exportações.
 
@@ -69,14 +69,17 @@ As respostas são calculadas em cada pedido e o cliente usa `cache: no-store`. E
 
 ## Testes e resultados
 
-- **104 testes Python/PostgreSQL aprovados, zero ignorados**, incluindo 5 testes novos de estatísticas e toda a regressão das fases anteriores.
+- **105 testes Python/PostgreSQL aprovados, zero ignorados**, incluindo 6 testes de estatísticas e toda a regressão das fases anteriores. A suite anterior de 104 testes também foi repetida e aprovada antes do reforço da cobertura.
 - Cobertura: comparação de jogo, resultado US/OPPONENT, autogolos, três tipos de remate e total sem golos, cartões e outros indicadores, timeline ordenada, FINISHED/V/E/D, atividade de jogos em curso/cancelados, isolamento por equipa/época, convocado/titular, assistências, jogadores inativos, rankings e empates por nome, época vazia e jogo inexistente.
 - Editar um golo para remate remove o golo/assistência, muda vitória para empate e acrescenta o remate; apagar o remate remove-o dos rankings e totais. Exercitado através dos endpoints reais de edição/eliminação.
+- Validação adicional: editar GOAL US com assistência para OWN_GOAL US muda vitória para derrota e remove golo/assistência individuais; alterar o autogolo para OPPONENT volta a creditar a nossa equipa, sem atribuição individual; eliminar o autogolo deixa empate 0–0. Em cada passo são conferidos os três endpoints, resultado, comparação, V/E/D, diferença de golos, timeline, totais individuais e rankings. Convocatórias e titularidades mantêm-se.
 - `python -m alembic check`: **No new upgrade operations detected**. Revisão: **0004 (head)**.
 - Lint, TypeScript e build: **aprovados**.
 - **14 testes de browser aprovados**: 4 de Estatísticas e 10 de regressão. Cobrem homepage → época, cartões, comparação, rankings, jogador, detalhe → estatísticas do jogo, timeline, loading/erro/retry, época/jogo sem dados e 404. Percursos a 360 e 1280 px sem overflow horizontal.
 
 Testes backend em PostgreSQL real, com esquemas temporários isolados. Testes de browser no Microsoft Edge com HTTP controlado. Não foi realizado teste em telemóvel físico nem teste integrado browser–API real.
+
+Na repetição de 2 de outubro, os 14 testes E2E passaram e o comando terminou com código 0. O encerramento automático do servidor temporário Playwright ficou pendente neste ambiente Windows restrito; foi necessário parar apenas o processo Next iniciado pelo teste para concluir o teardown. Não foi alterada a configuração Playwright.
 
 Avisos não bloqueantes: descontinuação futura do transporte `httpx` no Starlette e cores do terminal Playwright. O build usa fontes Google e pode precisar de acesso à rede.
 
@@ -145,5 +148,7 @@ Modificados:
 - `README.md`
 
 Inventário relativo ao início desta fase; o backend continua fora do repositório Git. Não foram alteradas migrações, modelos, lógica do Jogo ao Vivo ou dependências.
+
+Nesta revisão final foram modificados apenas `backend/tests/test_statistics.py` (cobertura adicional de edição/eliminação de autogolos) e este documento. Não foram criados novos ficheiros de implementação. Os artefactos locais de build/testes são gerados pelos comandos de validação.
 
 **Estatísticas prontas para teste manual no browser e no telemóvel**, sujeito à configuração LAN. Não se avançou para autenticação nem multiutilizador.

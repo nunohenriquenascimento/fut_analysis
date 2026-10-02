@@ -62,7 +62,7 @@ def context(db: Session) -> RosterContext:
     team = db.scalar(select(Team).where(Team.name == CLUB_NAME))
     if season is None or team is None:
         raise HTTPException(404, "Época/equipa não configuradas. Execute python -m app.seed no backend.")
-    return RosterContext(season_id=season.id, season_name=season.name, team_id=team.id, team_name=team.name)
+    return RosterContext(season_id=season.id, season_name=season.name, team_id=team.id, team_name=team.name, team_crest_path=team.crest_path)
 
 
 def player_totals(db: Session, roster: RosterContext, match_ids, rows: list[MatchEvent]) -> list[PlayerStatistics]:

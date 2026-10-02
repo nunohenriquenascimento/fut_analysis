@@ -16,6 +16,26 @@ class Settings(BaseSettings):
 
     database_url: SecretStr
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    auth_cookie_secure: bool = False
+    auth_session_hours: int = 8
+
+    @field_validator("auth_session_hours")
+    @classmethod
+    def valid_session_hours(cls, value: int) -> int:
+        if not 1 <= value <= 24:
+            raise ValueError("AUTH_SESSION_HOURS must be between 1 and 24")
+        return value
+
+    @field_validator("cors_origins")
+    @classmethod
+    def explicit_origins(cls, value: list[str]) -> list[str]:
+        from urllib.parse import urlsplit
+        if not value or any(urlsplit(origin).scheme not in {"http", "https"}
+                            or not urlsplit(origin).netloc or "*" in origin or urlsplit(origin).username
+                            or urlsplit(origin).path
+                            or urlsplit(origin).query or urlsplit(origin).fragment for origin in value):
+            raise ValueError("CORS_ORIGINS must contain explicit origins without paths")
+        return value
 
     @field_validator("database_url")
     @classmethod
