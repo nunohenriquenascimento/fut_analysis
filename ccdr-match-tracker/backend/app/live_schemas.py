@@ -55,6 +55,8 @@ class Score(BaseModel):
 
 class MatchDetailRead(MatchRead):
     score: Score
+    can_delete: bool
+    can_cancel: bool
 
 
 class LiveState(BaseModel):

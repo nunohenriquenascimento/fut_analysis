@@ -131,6 +131,10 @@ class SquadEntry(InputModel):
     is_starter: bool = Field(strict=True)
 
 
+class ForceMatchDelete(InputModel):
+    confirmation: Literal["ELIMINAR"]
+
+
 class SquadReplace(InputModel):
     players: list[SquadEntry]
 

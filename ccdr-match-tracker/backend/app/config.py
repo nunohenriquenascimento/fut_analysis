@@ -1,7 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -15,8 +17,10 @@ class Settings(BaseSettings):
     )
 
     database_url: SecretStr
+    app_env: Literal["development", "production"] = "development"
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     auth_cookie_secure: bool = False
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     auth_session_hours: int = 8
 
     @field_validator("auth_session_hours")
@@ -29,7 +33,6 @@ class Settings(BaseSettings):
     @field_validator("cors_origins")
     @classmethod
     def explicit_origins(cls, value: list[str]) -> list[str]:
-        from urllib.parse import urlsplit
         if not value or any(urlsplit(origin).scheme not in {"http", "https"}
                             or not urlsplit(origin).netloc or "*" in origin or urlsplit(origin).username
                             or urlsplit(origin).path
@@ -44,9 +47,23 @@ class Settings(BaseSettings):
             url = make_url(value.get_secret_value())
         except Exception:
             raise ValueError("DATABASE_URL must be a valid PostgreSQL URL") from None
-        if url.drivername not in {"postgresql", "postgresql+psycopg"} or not url.database:
+        if url.drivername not in {"postgres", "postgresql", "postgresql+psycopg"} or not url.database:
             raise ValueError("Use postgresql+psycopg://USER:PASSWORD@HOST:5432/DATABASE")
         return SecretStr(url.set(drivername="postgresql+psycopg").render_as_string(hide_password=False))
+
+    @model_validator(mode="after")
+    def production_security(self):
+        if self.auth_cookie_samesite == "none" and not self.auth_cookie_secure:
+            raise ValueError("AUTH_COOKIE_SAMESITE=none requires AUTH_COOKIE_SECURE=true")
+        if self.app_env == "production":
+            if not self.auth_cookie_secure:
+                raise ValueError("Production requires AUTH_COOKIE_SECURE=true")
+            if not {"cors_origins", "auth_cookie_samesite"} <= self.model_fields_set:
+                raise ValueError("Production requires explicit CORS_ORIGINS and AUTH_COOKIE_SAMESITE")
+            if any(urlsplit(origin).scheme != "https" or urlsplit(origin).hostname in {"localhost", "127.0.0.1", "::1"}
+                   for origin in self.cors_origins):
+                raise ValueError("Production CORS_ORIGINS must use public HTTPS origins")
+        return self
 
 
 @lru_cache

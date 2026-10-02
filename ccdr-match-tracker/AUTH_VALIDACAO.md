@@ -1,5 +1,7 @@
 # Autenticação e permissões — validação
 
+Atualização posterior: a gestão segura de eliminação/cancelamento de jogos foi retomada e concluída; consultar [JOGOS_ELIMINACAO_VALIDACAO.md](JOGOS_ELIMINACAO_VALIDACAO.md). As referências à suspensão abaixo registam o âmbito da fase de autenticação.
+
 DELETE/CANCEL de jogos permanece suspenso. Esta fase implementa autenticação real e autorização sem aceitar identidade ou papel livremente enviado pelo browser.
 
 ## Estratégia
@@ -153,3 +155,6 @@ Avisos observados: depreciação Starlette/httpx nos testes Python e NO_COLOR/FO
 Limites desta fase: sem recuperação por email, MFA ou autoalteração de password por COACH/VIEWER; o ADMIN define novas passwords. Sem funcionamento offline autenticado. Escritas partilham um bloqueio global curto, apropriado à aplicação atual; maior escala exigirá revisão de concorrência e limites no proxy.
 
 Autenticação pronta para teste manual após criar o primeiro ADMIN e iniciar os servidores. DELETE/CANCEL de jogos não foi implementado.
+# Configuração de produção posterior
+
+Consultar [PRODUCAO_DEPLOY.md](PRODUCAO_DEPLOY.md): cookie HttpOnly mantém-se; `AUTH_COOKIE_SAMESITE=lax` é o default local/same-site e `none` exige Secure para domínios cross-site. `APP_ENV=production` exige Secure e origens HTTPS explícitas. CSRF, autorização e revogação permanecem. Cookies de terceiros bloqueados exigem domínios próprios same-site para compatibilidade consistente.

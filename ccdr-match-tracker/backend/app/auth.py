@@ -60,6 +60,19 @@ def trusted_origin(request: Request) -> None:
         raise HTTPException(403, "Origem do pedido não autorizada.")
 
 
+def session_user(db: Session, token: str | None, *, lock: bool = False) -> tuple[AuthSession, User]:
+    if not token or len(token) != 43:
+        raise HTTPException(401, "Sessão inexistente ou expirada.")
+    query = select(AuthSession, User).join(User, User.id == AuthSession.user_id).where(
+        AuthSession.token_hash == digest(token), AuthSession.expires_at > now(), User.is_active.is_(True))
+    if lock:
+        query = query.with_for_update(of=(AuthSession, User))
+    row = db.execute(query).first()
+    if row is None:
+        raise HTTPException(401, "Sessão inexistente ou expirada.")
+    return row
+
+
 def current_user(request: Request, db: Database) -> User:
     token = request.cookies.get(cookie_name())
     if not token or len(token) != 43:
@@ -67,14 +80,7 @@ def current_user(request: Request, db: Database) -> User:
     writing = request.method not in {"GET", "HEAD", "OPTIONS"}
     if writing:
         lock_users(db)
-    query = select(AuthSession, User).join(User, User.id == AuthSession.user_id).where(
-        AuthSession.token_hash == digest(token), AuthSession.expires_at > now(), User.is_active.is_(True))
-    if writing:
-        query = query.with_for_update(of=(AuthSession, User))
-    row = db.execute(query).first()
-    if row is None:
-        raise HTTPException(401, "Sessão inexistente ou expirada.")
-    session, user = row
+    session, user = session_user(db, token, lock=writing)
     if writing:
         trusted_origin(request)
         if not hmac.compare_digest(request.headers.get("x-csrf-token", "").encode(), session.csrf_token.encode()):

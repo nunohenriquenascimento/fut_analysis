@@ -1,15 +1,18 @@
-from app.auth import current_user, require_editor
+from app.auth import Admin, CurrentUser, current_user, require_editor
+from app.enums import MatchStatus, UserRole
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Match, Player, Season, Team
+from app.models import Match, MatchEvent, MatchSquad, Player, Season, Team
+from app.schemas import ForceMatchDelete
+from app.live_socket import notify_live
 from app.schemas import MatchCreate, MatchRead, MatchUpdate, SquadReplace, SquadPlayer, PlayerCreate, PlayerRead, PlayerUpdate, RosterContext
-from app.match_service import get_match, resolve_opponent, read_squad, replace_squad
+from app.match_service import cancel_match, deletable, get_match, resolve_opponent, read_squad, replace_squad
 from app.roster import CLUB_NAME, SEASON_NAME
 from app.live_schemas import MatchDetailRead
 from app.live_service import events, score, protect_event_players
@@ -130,9 +133,69 @@ def create_match(payload: MatchCreate, db: Database):
 
 
 @router.get("/matches/{match_id}", response_model=MatchDetailRead, tags=["matches"], dependencies=[Depends(current_user)])
-def match_detail(match_id: int, db: Database):
+def match_detail(match_id: int, db: Database, user: CurrentUser):
     match = get_match(db, match_id, lock=True)
-    return MatchDetailRead(**MatchRead.model_validate(match).model_dump(), score=score(events(db, match_id)))
+    return management_detail(db, match, user.role)
+
+
+def management_detail(db: Session, match: Match, role: UserRole) -> MatchDetailRead:
+    admin = role == UserRole.ADMIN
+    return MatchDetailRead(**MatchRead.model_validate(match).model_dump(), score=score(events(db, match.id)),
+                           can_delete=admin and deletable(db, match),
+                           can_cancel=admin and match.status != MatchStatus.CANCELLED)
+
+
+@router.delete("/matches/{match_id}", status_code=204, tags=["matches"])
+def delete_match(match_id: int, db: Database, admin: Admin):
+    try:
+        match = get_match(db, match_id, lock=True)
+        if not deletable(db, match):
+            raise HTTPException(409, "Não é seguro eliminar este jogo. Tem convocatória, eventos ou histórico Live, ou já não está agendado. Cancele o jogo para preservar o histórico.")
+        db.delete(match)
+        db.commit()
+        notify_live(match_id, "live.match_updated", admin.id)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "O jogo tem dependências e não pode ser eliminado. Cancele o jogo para preservar o histórico.") from None
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.delete("/matches/{match_id}/force", status_code=204, tags=["matches"])
+def force_delete_match(match_id: int, payload: ForceMatchDelete, db: Database, admin: Admin):
+    try:
+        match = get_match(db, match_id, lock=True)
+        # Explicitly delete the two verified dependent tables, never shared entities.
+        db.execute(delete(MatchEvent).where(MatchEvent.match_id == match_id))
+        db.execute(delete(MatchSquad).where(MatchSquad.match_id == match_id))
+        db.delete(match)
+        db.commit()
+        notify_live(match_id, "live.match_updated", admin.id)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Não foi possível eliminar o jogo: existe uma dependência impeditiva. Nenhum dado foi apagado.") from None
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.post("/matches/{match_id}/cancel", response_model=MatchDetailRead, tags=["matches"])
+def post_cancel_match(match_id: int, db: Database, admin: Admin):
+    try:
+        match = get_match(db, match_id, lock=True)
+        cancel_match(match)
+        db.flush()
+        result = management_detail(db, match, admin.role)
+        db.commit()
+        notify_live(match_id, "live.cancelled", admin.id)
+        return result
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Dados do jogo em conflito. Recarregue e tente novamente.") from None
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.patch("/matches/{match_id}", response_model=MatchRead, tags=["matches"], dependencies=[Depends(require_editor)])

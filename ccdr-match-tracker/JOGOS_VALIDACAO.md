@@ -1,5 +1,7 @@
 # Jogos, jornadas e convocatórias
 
+A fase posterior de eliminação/cancelamento seguro com ADMIN está documentada em [JOGOS_ELIMINACAO_VALIDACAO.md](JOGOS_ELIMINACAO_VALIDACAO.md). O restante documento regista a validação original desta fase.
+
 Implementação de 1 de outubro de 2026. Plantel preservado; não foram implementados Jogo ao Vivo, autenticação, cronómetro, transições de estado, eventos, resultados, estatísticas, WebSockets ou offline.
 
 ## Funcionalidade

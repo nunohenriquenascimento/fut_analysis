@@ -1,9 +1,10 @@
 """Match and squad rules, shared by the HTTP endpoints."""
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import exists, func, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.models import Match, MatchSquad, Player, Team
+from app.models import Match, MatchEvent, MatchSquad, Player, Team
+from app.enums import MatchStatus
 from app.schemas import PlayerRead, SquadEntry, SquadPlayer
 
 
@@ -15,6 +16,24 @@ def get_match(db: Session, match_id: int, *, lock: bool = False) -> Match:
     if match is None:
         raise HTTPException(404, "Jogo não encontrado.")
     return match
+
+
+def deletable(db: Session, match: Match) -> bool:
+    """Current stored history only; never cascade historical records."""
+    if match.status != MatchStatus.SCHEDULED or match.elapsed_seconds != 0 or match.clock_started_at is not None:
+        return False
+    return not db.scalar(select(exists().where(MatchSquad.match_id == match.id))) and not db.scalar(
+        select(exists().where(MatchEvent.match_id == match.id)))
+
+
+def cancel_match(match: Match) -> None:
+    # Import here because Live also uses get_match from this module.
+    from app import live_service as live
+    if match.status == MatchStatus.CANCELLED:
+        raise HTTPException(409, "O jogo já está cancelado.")
+    match.elapsed_seconds = live.elapsed(match, live.utcnow())
+    match.clock_started_at = None
+    match.status = MatchStatus.CANCELLED
 
 
 def resolve_opponent(db: Session, name: str, team_id: int) -> Team:

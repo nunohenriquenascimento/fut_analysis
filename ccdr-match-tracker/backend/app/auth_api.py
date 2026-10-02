@@ -58,7 +58,7 @@ def login(payload: Login, request: Request, response: Response, db: Database):
     result = AuthRead(user=UserRead.model_validate(user), csrf_token=csrf)
     db.commit()
     response.set_cookie(cookie_name(), token, max_age=hours * 3600, httponly=True,
-                        secure=get_settings().auth_cookie_secure, samesite="lax", path="/")
+                        secure=get_settings().auth_cookie_secure, samesite=get_settings().auth_cookie_samesite, path="/")
     no_cache(response)
     return result
 
@@ -73,7 +73,7 @@ def me(request: Request, response: Response, user: CurrentUser):
 def logout(request: Request, response: Response, db: Database, user: CurrentUser):
     db.delete(request.state.auth_session)
     db.commit()
-    response.delete_cookie(cookie_name(), path="/", secure=get_settings().auth_cookie_secure, httponly=True, samesite="lax")
+    response.delete_cookie(cookie_name(), path="/", secure=get_settings().auth_cookie_secure, httponly=True, samesite=get_settings().auth_cookie_samesite)
     no_cache(response)
 
 

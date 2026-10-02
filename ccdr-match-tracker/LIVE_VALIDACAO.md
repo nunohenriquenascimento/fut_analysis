@@ -1,6 +1,6 @@
 # Jogo ao Vivo — validação de 1 de outubro de 2026
 
-Fase implementada após a validação manual do Plantel e Jogos/Convocatórias. Não foram implementadas Estatísticas, autenticação, permissões, WebSockets, sincronização multiutilizador ou PWA offline.
+Registo da fase inicial, implementada após a validação manual do Plantel e Jogos/Convocatórias. As fases posteriores acrescentaram Estatísticas, autenticação, permissões e sincronização multiutilizador; consultar os respetivos documentos e [LIVE_WEBSOCKETS_VALIDACAO.md](LIVE_WEBSOCKETS_VALIDACAO.md). PWA offline continua fora do âmbito.
 
 ## Interface
 
@@ -135,7 +135,7 @@ Para telemóvel na mesma rede: `NEXT_PUBLIC_API_URL=http://IP_DO_PC:8000` no fro
 
 - O relógio depende da hora do servidor e das ações manuais para terminar cada parte. Não há ajuste de tempos ou transições inversas nesta fase.
 - Registar depois de escolher jogadores guarda o instante de submissão, não o instante em que o botão foi inicialmente tocado.
-- Sem sincronização entre dispositivos: outro operador pode alterar o jogo sem atualização automática deste ecrã.
+- Na fase inicial não existia sincronização entre dispositivos. Esta limitação foi resolvida na fase documentada em [LIVE_WEBSOCKETS_VALIDACAO.md](LIVE_WEBSOCKETS_VALIDACAO.md), com um worker/instância backend.
 - Double-submit é bloqueado no ecrã, mas não há chave de idempotência para repetir pedidos após perda de rede. Se uma resposta se perder, atualizar o estado e verificar a timeline antes de repetir.
 - Editar/eliminar eventos não tem auditoria de versões. Não há autenticação; uso local de desenvolvimento.
 - `0004` exige classificação manual de eventuais SHOT legados. Não altera dados silenciosamente.
@@ -164,3 +164,6 @@ Modificados:
 Sem novas dependências. O backend continua fora do repositório Git; o inventário compara com o início desta fase.
 
 **Jogo ao Vivo pronto para teste manual no browser e no telemóvel**, sujeito à configuração LAN. Não se avançou para Estatísticas.
+# Sincronização entre utilizadores
+
+A fase de WebSockets está descrita em [LIVE_WEBSOCKETS_VALIDACAO.md](LIVE_WEBSOCKETS_VALIDACAO.md), incluindo autenticação, protocolo, reconexão, testes e limite de um worker/instância. As regras Live descritas acima permanecem.

@@ -61,7 +61,7 @@ def test_create_list_detail_edit_and_reuse_opponent(games):
     assert db.get(Team, match["opponent_id"]).name == "Adversário"
     second = create(client, {**payload, "opponent_name": "  ADVERSÁRIO  ", "matchday": 4})
     assert second["opponent_id"] == match["opponent_id"]
-    assert client.get(f"/matches/{match['id']}").json() == {**match, "score": {"us": 0, "opponent": 0}}
+    assert client.get(f"/matches/{match['id']}").json() == {**match, "score": {"us": 0, "opponent": 0}, "can_delete": True, "can_cancel": True}
     listed = client.get("/matches", params={"season_id": payload["season_id"], "team_id": payload["team_id"]})
     assert listed.status_code == 200
     assert {row["id"] for row in listed.json()} == {match["id"], second["id"]}

@@ -4,6 +4,10 @@ Base de uma aplicação mobile-first de registo de jogos. Frontend Next.js/TypeS
 
 ## Estado desta fase
 
+Preparação de produção Vercel + Railway (API/WebSockets/PostgreSQL), com HTTPS, cookies configuráveis e um worker: [PRODUCAO_DEPLOY.md](PRODUCAO_DEPLOY.md). Deployment e migrações de produção são manuais; nenhum serviço foi publicado nesta preparação.
+
+ADMIN dispõe ainda de **Eliminar jogo e dados associados**, numa área destrutiva separada, com confirmação reforçada e endpoint `DELETE /matches/{match_id}/force`. O DELETE seguro original mantém todas as restrições. Ver [JOGOS_ELIMINACAO_FORCADA_VALIDACAO.md](JOGOS_ELIMINACAO_FORCADA_VALIDACAO.md).
+
 - Layout e media: identidade do CCDR com emblema real, paleta clara vermelha/azul/amarela centralizada, componentes partilhados e suporte a fotos/emblemas locais. Ver [LAYOUT_VALIDACAO.md](LAYOUT_VALIDACAO.md) para consultar cores, associar imagens e consultar a validação da migração `0005`.
 - Plantel abre `/players`; Jogos abre `/matches`. O detalhe `/matches/{match_id}` permite editar o jogo e guardar a convocatória.
 - API do Plantel preservada. Jogos: `GET/POST /matches`, `GET/PATCH /matches/{match_id}` e `GET/PUT /matches/{match_id}/squad`.
@@ -12,7 +16,7 @@ Base de uma aplicação mobile-first de registo de jogos. Frontend Next.js/TypeS
 - Modelos `User`, `Season`, `Team`, `Player`, `Match`, `MatchSquad` e `MatchEvent`.
 - Clientes tipados em `frontend/lib/api.ts`, `frontend/lib/live.ts` e `frontend/lib/statistics.ts`. O contexto resolve os IDs de equipa e época no backend.
 - Manifesto web e idioma português preparados. Ainda faltam ícones próprios, service worker, instalação validada e estratégia de sincronização offline para uma PWA completa.
-- Autenticação com cookie HttpOnly, sessões revogáveis, CSRF e papéis ADMIN/COACH/VIEWER. Gestão de contas em `/users`, apenas ADMIN; login em `/login`. Ver [AUTH_VALIDACAO.md](AUTH_VALIDACAO.md) para estratégia, permissões, testes e configuração HTTPS. DELETE/CANCEL de jogos permanece suspenso. Ainda não existem WebSockets ou sincronização offline.
+- Autenticação com cookie HttpOnly, sessões revogáveis, CSRF e papéis ADMIN/COACH/VIEWER. Gestão de contas em `/users`, apenas ADMIN; login em `/login`. Ver [AUTH_VALIDACAO.md](AUTH_VALIDACAO.md) para estratégia, permissões, testes e configuração HTTPS. Eliminação/cancelamento seguro de jogos apenas para ADMIN: [JOGOS_ELIMINACAO_VALIDACAO.md](JOGOS_ELIMINACAO_VALIDACAO.md). Jogo ao Vivo sincronizado por WebSocket autenticado: [LIVE_WEBSOCKETS_VALIDACAO.md](LIVE_WEBSOCKETS_VALIDACAO.md). Requer um worker/instância backend; não existe sincronização offline.
 
 ## Estrutura
 
@@ -175,11 +179,11 @@ IDs inexistentes devolvem 404; camisola repetida na mesma equipa/época devolve 
 - Uma linha `MatchSquad` representa um convocado; `is_starter` distingue titular de suplente. Não convocado corresponde à ausência de linha. O PUT substitui a convocatória numa transação e valida equipa, época, duplicados e estado ativo; jogadores anteriormente convocados permanecem visíveis se forem desativados.
 - `Match.matchday` guarda a jornada, obrigatória nos novos jogos. A migração `0003` mantém NULL nos jogos antigos sem jornada conhecida. O PATCH não altera equipa, época ou estado; todos os novos jogos começam em `SCHEDULED`.
 - Papéis: `ADMIN`, `COACH`, `VIEWER`, validados pelo backend em cada pedido. Posições: `GR`, `DC`, `ALA`, `MDC`, `MC`, `PL`, `UNIVERSAL`.
-- Estados preservados: `SCHEDULED`, `FIRST_HALF`, `HALF_TIME`, `SECOND_HALF`, `FINISHED`, `CANCELLED`. O serviço ao vivo permite apenas a sequência agendado → 1.ª parte → intervalo → 2.ª parte → terminado. Não há ação de cancelamento/reabertura nesta fase.
+- Estados preservados: `SCHEDULED`, `FIRST_HALF`, `HALF_TIME`, `SECOND_HALF`, `FINISHED`, `CANCELLED`. O serviço ao vivo permite apenas a sequência agendado → 1.ª parte → intervalo → 2.ª parte → terminado. ADMIN pode cancelar através de `POST /matches/{match_id}/cancel`, preservando histórico e parando o relógio. Não existe reabertura. `DELETE /matches/{match_id}` exige SCHEDULED sem convocatória, eventos ou dados do relógio.
 - O relógio acumula tempo efetivamente jogado, incluindo compensação e excluindo intervalo. `clock_started_at` e `elapsed_seconds` persistidos permitem reconstruí-lo após refresh. O servidor calcula período e tempo dos eventos; o cliente não os envia. A timeline ordena por período, segundos e ID.
 - `player_id` identifica o marcador; `related_player_id` identifica a assistência opcional. Em substituições representam quem sai e quem entra, obrigatoriamente diferentes. Todos os jogadores associados têm de pertencer à equipa/época e convocatória. Ainda não há controlo de quem está em campo.
 - `GOAL` atribui golo à equipa indicada; `OWN_GOAL` atribui à contrária. `PENALTY` não altera o resultado. Só existem remates específicos; a migração `0004` remove `SHOT` e recusa a aplicação enquanto houver eventos antigos sem classificação. Um golo não cria outro remate.
-- O resultado é derivado dos eventos e recalculado ao editar/apagar. A convocatória não pode retirar jogadores referenciados em eventos sem os corrigir primeiro. Novos eventos só durante as partes; correções também são permitidas após o fim. Não existe sincronização entre dispositivos; usar Atualizar estado ou refresh.
+- O resultado é derivado dos eventos e recalculado ao editar/apagar. A convocatória não pode retirar jogadores referenciados em eventos sem os corrigir primeiro. Novos eventos só durante as partes; correções também são permitidas após o fim. No Live, WebSocket notifica após commit e cada página refaz o estado por HTTP, preservando formulários. Reconexão recupera o estado atual; Atualizar estado continua disponível sem socket. Ver [LIVE_WEBSOCKETS_VALIDACAO.md](LIVE_WEBSOCKETS_VALIDACAO.md).
 - Para testar num telemóvel futuramente, configurar o IP LAN no URL público da API e nos CORS e expor os servidores na rede local. `localhost` no telemóvel aponta para o próprio telemóvel. Publicação e PWA exigirão HTTPS e autenticação.
 
 ## Verificações e futuras migrações
