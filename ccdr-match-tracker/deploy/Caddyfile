@@ -1,0 +1,27 @@
+{
+	auto_https off
+	admin off
+}
+
+:{$PORT:8080} {
+	# TLS terminates at Railway's edge. Only this port is published.
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Forwarded-Proto https
+			header_up -X-Forwarded-For
+		}
+	}
+	# Preserve /ws; reverse_proxy handles WebSocket Upgrade automatically.
+	handle /ws/* {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Forwarded-Proto https
+			header_up -X-Forwarded-For
+		}
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}

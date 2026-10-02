@@ -4,6 +4,8 @@ Base de uma aplicação mobile-first de registo de jogos. Frontend Next.js/TypeS
 
 ## Estado desta fase
 
+Produção recomendada: **Railway same-origin**, um domínio para Next.js, `/api` e `/ws`, cookie Secure/HttpOnly/Lax e uma instância: [RAILWAY_SAME_ORIGIN.md](RAILWAY_SAME_ORIGIN.md). Usa o Dockerfile da raiz e substitui o deployment separado Vercel/Railway; migração manual, sem publicação automática.
+
 Diagnóstico temporário de login mobile, opt-in e sem secrets: [AUTH_MOBILE_DIAGNOSTICO.md](AUTH_MOBILE_DIAGNOSTICO.md). Flags backend/frontend desligadas por defeito; estratégia de autenticação preservada.
 
 Preparação de produção Vercel + Railway (API/WebSockets/PostgreSQL), com HTTPS, cookies configuráveis e um worker: [PRODUCAO_DEPLOY.md](PRODUCAO_DEPLOY.md). Deployment e migrações de produção são manuais; nenhum serviço foi publicado nesta preparação.

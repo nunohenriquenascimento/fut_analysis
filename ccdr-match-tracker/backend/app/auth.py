@@ -88,7 +88,7 @@ def current_user(request: Request, db: Database) -> User:
     try:
         session, user = session_user(db, token, lock=writing)
     except HTTPException:
-        if get_settings().auth_debug_logging and request.url.path == '/auth/me':
+        if get_settings().auth_debug_logging and auth_debug.backend_path(request) == '/auth/me':
             # Observe only after the authoritative validation failed. No policy changes.
             try:
                 row = db.get(AuthSession, digest(token))

@@ -17,6 +17,6 @@ export function authDebug(path: string, phase: "request" | "response" | "fetch_e
 export function authApiOrigin(value: string) {
   if (process.env.NEXT_PUBLIC_AUTH_DEBUG !== "true" || typeof window === "undefined") return;
   // Print only a credential-free origin, never query/path or the raw config.
-  try { console.info("AUTH_DEBUG_API", { api_origin: new URL(value).origin }); }
+  try { console.info("AUTH_DEBUG_API", { api_origin: new URL(value, window.location.origin).origin }); }
   catch { console.info("AUTH_DEBUG_API", { reason: "invalid_api_url" }); }
 }

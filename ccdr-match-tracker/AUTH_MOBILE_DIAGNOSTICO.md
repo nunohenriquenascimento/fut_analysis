@@ -1,5 +1,7 @@
 # Diagnóstico temporário de autenticação mobile
 
+O plano posterior de migração está em [RAILWAY_SAME_ORIGIN.md](RAILWAY_SAME_ORIGIN.md): um domínio, API `/api`, WS `/ws` e cookie Lax. O diagnóstico reconhece também o prefixo `/api`; as flags permanecem desligadas por defeito. Os domínios abaixo descrevem o incidente anterior.
+
 Frontend: `https://fut-analysis.vercel.app`. Backend: `https://futanalysis-production.up.railway.app`. Investiga login 200 seguido de `/auth/me` 401, sem alterar cookies, SameSite, CORS autorizado, CSRF, permissões ou regras de sessão.
 
 ## Ativar e desativar

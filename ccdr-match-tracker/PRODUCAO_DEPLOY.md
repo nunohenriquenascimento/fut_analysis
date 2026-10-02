@@ -1,5 +1,7 @@
 # Produção: Vercel + Railway
 
+**Arquitetura anterior.** O plano atual elimina cross-site e Vercel, servindo frontend/API/WebSocket no mesmo domínio Railway: [RAILWAY_SAME_ORIGIN.md](RAILWAY_SAME_ORIGIN.md). Este documento permanece como referência/rollback da fase anterior.
+
 Preparação de 2 de outubro de 2026. Nenhum serviço foi criado, publicado ou alterado na cloud. Sem alterações ao esquema; Alembic continua em `0006`. A configuração abaixo exige intervenção manual nos painéis.
 
 ## Arquitetura e domínios

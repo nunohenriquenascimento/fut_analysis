@@ -15,6 +15,12 @@ _revoked = OrderedDict()
 _lock = Lock()
 
 
+def backend_path(request):
+    path = request.url.path
+    root = request.scope.get('root_path', '').rstrip('/')
+    return path[len(root):] if root and path.startswith(root + '/') else path
+
+
 def remember_revoked(hashes):
     if not get_settings().auth_debug_logging:
         return
@@ -57,7 +63,7 @@ def fields(request, **values):
 
 async def middleware(request, call_next):
     config = get_settings()
-    enabled = config.auth_debug_logging and request.url.path in {'/auth/login', '/auth/me'}
+    enabled = config.auth_debug_logging and backend_path(request) in {'/auth/login', '/auth/me'}
     if not enabled:
         return await call_next(request)
     request_id = uuid4().hex
@@ -74,7 +80,7 @@ async def middleware(request, call_next):
                 other_cookie_count=sum(name not in {'ccdr_session', '__Host-ccdr_session'} for name in request.cookies),
                 session_created=False)
     request.state.auth_diagnostic = data
-    event = 'AUTH_LOGIN' if request.url.path == '/auth/login' else 'AUTH_ME'
+    event = 'AUTH_LOGIN' if backend_path(request) == '/auth/login' else 'AUTH_ME'
     def emit(phase, **extra):
         logger.info(json.dumps(dict(data, timestamp=datetime.now(timezone.utc).isoformat(),
                                     event=event, phase=phase, **extra), separators=(',', ':')))

@@ -11,7 +11,7 @@ from app.statistics_api import router as statistics_router
 from app.config import get_settings
 from app.auth_api import router as auth_router
 from app.live_socket import router as socket_router
-from app.auth_debug import middleware as auth_debug_middleware
+from app.auth_debug import middleware as auth_debug_middleware, backend_path
 
 app = FastAPI(title="CCDR Vila Cortez do Mondego — Sub-19", version="0.1.0")
 app.add_middleware(
@@ -33,14 +33,14 @@ app.middleware("http")(auth_debug_middleware)
 @app.middleware("http")
 async def private_responses(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path != "/health":
+    if backend_path(request) != "/health":
         response.headers["Cache-Control"] = "no-store"
     return response
 
 
 @app.exception_handler(RequestValidationError)
 async def safe_validation_errors(request: Request, exc: RequestValidationError):
-    if request.url.path.startswith(("/auth/", "/users")):
+    if backend_path(request).startswith(("/auth/", "/users")):
         return JSONResponse(status_code=422, content={"detail": [
             {key: error[key] for key in ("loc", "msg", "type") if key in error} for error in exc.errors()
         ]})

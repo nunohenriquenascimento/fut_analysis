@@ -6,7 +6,9 @@ export type SocketStatus = "connected" | "reconnecting" | "offline";
 const types = new Set<string>(["live.snapshot", "live.state_changed", "live.event_created", "live.event_updated", "live.event_deleted", "live.match_updated", "live.cancelled", "live.ping"]);
 
 export function liveSocketUrl(matchId: number): string {
-  const url = new URL(`${API_URL}/ws/matches/${matchId}/live`);
+  const url = API_URL.startsWith("/")
+    ? new URL(`/ws/matches/${matchId}/live`, window.location.origin)
+    : new URL(`${API_URL}/ws/matches/${matchId}/live`);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 }
