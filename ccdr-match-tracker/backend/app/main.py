@@ -7,6 +7,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.api import router
 from app.live_api import router as live_router
+from app.merge_api import router as merge_router
 from app.statistics_api import router as statistics_router
 from app.config import get_settings
 from app.auth_api import router as auth_router
@@ -23,6 +24,7 @@ app.add_middleware(
     expose_headers=["X-Request-ID"],
 )
 app.include_router(auth_router)
+app.include_router(merge_router)
 app.include_router(router)
 app.include_router(live_router)
 app.include_router(statistics_router)

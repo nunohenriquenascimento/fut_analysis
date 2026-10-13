@@ -15,6 +15,9 @@ import { PlayerAvatar } from "@/components/media";
 import { StatusBadge, SectionHeader, LoadingState } from "@/components/ui";
 import MatchScoreboard from "@/components/match-scoreboard";
 import MatchForm, { type MatchFields } from "../match-form";
+import LiveStateDialog from "@/components/live-state-dialog";
+import { liveApi } from "@/lib/live";
+import MergeDialog from "./merge-dialog";
 
 export default function MatchDetail({ matchId }: { matchId: number }) {
   const { canEdit, isAdmin } = useAuth();
@@ -29,6 +32,8 @@ export default function MatchDetail({ matchId }: { matchId: number }) {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [merging, setMerging] = useState(false);
   const [reload, setReload] = useState(0);
   const locked = useRef(false);
 
@@ -116,17 +121,25 @@ export default function MatchDetail({ matchId }: { matchId: number }) {
         </header>
         <div className="grid gap-3 sm:grid-cols-2"><Link href={`/matches/${matchId}/stats`} className="button button-secondary">Ver estatísticas</Link>
         <Link href={`/matches/${matchId}/live`} className="button button-primary">Abrir Jogo ao Vivo</Link></div>
+        {canEdit && match.status === "FINISHED" && <SecondaryButton disabled={busy || loading} onClick={() => { setError(""); setReopening(true); }}>Reabrir jogo</SecondaryButton>}
+        {canEdit && reopening && <LiveStateDialog mode="reopen" busy={busy} error={error} onClose={() => { setReopening(false); setError(""); }} onConfirm={() => void mutate(async () => {
+          await liveApi.reopen(matchId);
+          setReopening(false);
+          router.push(`/matches/${matchId}/live`);
+        }, "Jogo reaberto. Cronómetro parado.")} />}
         {canEdit && (editing ? <MatchForm match={match} busy={busy || loading} onSave={saveMatch} onCancel={() => setEditing(false)} />
           : <SecondaryButton disabled={busy || loading} onClick={() => { setEditing(true); setNotice(""); setError(""); }} className="w-full">Editar jogo</SecondaryButton>)}
         {error && <p role="alert" className="rounded-xl border border-error p-4 text-error">{error}</p>}
         {notice && <p role="status" className="text-success">{notice}</p>}
-        {isAdmin && (match.can_cancel || match.can_delete) && <section className="card space-y-3" aria-labelledby="management-section-title">
+        {isAdmin && <section className="card space-y-3" aria-labelledby="management-section-title">
           <SectionHeader id="management-section-title">Gestão do jogo</SectionHeader>
           <div className="grid gap-3 sm:grid-cols-2">
+            <SecondaryButton disabled={busy || loading} onClick={() => setMerging(true)}>Unir jogo de continuação</SecondaryButton>
             {match.can_cancel && <SecondaryButton disabled={busy || loading} onClick={() => { setManagement("cancel"); setManagementError(""); }}>Cancelar jogo</SecondaryButton>}
             {match.can_delete && <DangerButton disabled={busy || loading} onClick={() => { setManagement("delete"); setManagementError(""); }}>Eliminar jogo</DangerButton>}
           </div>
         </section>}
+        {isAdmin && merging && <MergeDialog principal={match} onClose={() => setMerging(false)} onMerged={(id) => { setMerging(false); setLoading(true); setReload(value => value + 1); router.replace(`/matches/${id}`); }} />}
         {isAdmin && <section className="card space-y-3 border-error" aria-labelledby="force-section-title">
           <SectionHeader id="force-section-title">Eliminação destrutiva</SectionHeader>
           <p className="text-sm">Para limpar jogos de teste ou criados por engano. Apaga definitivamente o jogo, convocatória, eventos e histórico associado.</p>

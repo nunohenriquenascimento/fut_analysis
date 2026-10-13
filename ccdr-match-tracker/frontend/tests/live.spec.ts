@@ -1,7 +1,7 @@
 import { expect, test } from "./auth-fixture";
 import type { EventFields, LiveState, MatchEvent, TransitionStatus } from "../lib/live";
 
-for (const width of [360, 1280]) {
+for (const width of [360, 390, 1280]) {
   test(`Jogo ao Vivo: relógio, eventos, resultado e transições a ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 850 });
     let offset = 0;
@@ -40,7 +40,15 @@ for (const width of [360, 1280]) {
       const path = new URL(request.url()).pathname;
       if (path.endsWith("/squad")) return route.fulfill({ json: state.squad.map((player) => ({ player, role: "TITULAR" })) });
       if (path === "/matches/31") return route.fulfill({ json: state.match });
-      if (path.endsWith("/transition")) {
+      if (path.endsWith("/reopen")) {
+        expect(state.match.status).toBe("FINISHED");
+        state.match.status = "SECOND_HALF";
+        state.match.clock_started_at = null;
+      } else if (path.endsWith("/resume")) {
+        expect(state.match.status).toBe("SECOND_HALF");
+        expect(state.match.clock_started_at).toBeNull();
+        state.match.clock_started_at = now();
+      } else if (path.endsWith("/transition")) {
         snapshot();
         const target = request.postDataJSON().status as TransitionStatus;
         state.match.elapsed_seconds = state.clock_elapsed_seconds;
@@ -123,9 +131,52 @@ for (const width of [360, 1280]) {
     await dialog.getByLabel("Jogador que entra").selectOption("2");
     await dialog.getByRole("button", { name: "Guardar evento" }).click();
     await expect(timeline).toContainText("Substituição — Jorge — Entra: Jajão");
-    await page.getByRole("button", { name: "Terminar jogo", exact: true }).click();
+    await page.getByRole("button", { name: "Terminar 2.ª Parte", exact: true }).click();
+    await expect(dialog.getByRole("heading", { name: "Tens a certeza que o jogo terminou?" })).toBeVisible();
+    expect(state.match.status).toBe("SECOND_HALF");
+    await dialog.getByRole("button", { name: "Voltar", exact: true }).click();
+    expect(state.match.status).toBe("SECOND_HALF");
+    await page.getByRole("button", { name: "Terminar 2.ª Parte", exact: true }).click();
+    await dialog.getByRole("button", { name: "Terminar jogo", exact: true }).click();
     await expect(page.getByText("Terminado", { exact: true })).toBeVisible();
     await expect(ours.getByRole("button", { name: "Golo", exact: true })).toBeDisabled();
+    const history = structuredClone(rows);
+    const finishedTime = await page.getByLabel("Cronómetro").textContent();
+    // Undo uses the same safe endpoint, followed by an explicit resume.
+    offset += 60 * 60 * 1000;
+    await page.getByRole("button", { name: "Desfazer", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Retomar 2.ª Parte", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Cronómetro")).toHaveText(finishedTime!);
+    expect(rows).toEqual(history);
+    await expect(ours.getByRole("button", { name: "Golo", exact: true })).toBeDisabled();
+    await page.waitForTimeout(1100);
+    await expect(page.getByLabel("Cronómetro")).toHaveText(finishedTime!);
+    await page.getByRole("button", { name: "Terminar 2.ª Parte", exact: true }).click();
+    await dialog.getByRole("button", { name: "Terminar jogo", exact: true }).click();
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Desfazer", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+    await expect(dialog).toContainText("Os eventos e o resultado serão mantidos.");
+    await dialog.getByRole("button", { name: "Voltar", exact: true }).click();
+    expect(state.match.status).toBe("FINISHED");
+    await page.getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+    await dialog.getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+    await expect(page.getByLabel("Cronómetro")).toHaveText(finishedTime!);
+    await expect(timeline.getByRole("listitem")).toHaveCount(history.length);
+    await expect(page.getByLabel("Resultado", { exact: true })).toHaveText("0 – 0");
+    offset += 10 * 60 * 1000;
+    await page.reload();
+    await expect(page.getByLabel("Cronómetro")).toHaveText(finishedTime!);
+    await page.getByRole("button", { name: "Retomar 2.ª Parte", exact: true }).click();
+    await expect(ours.getByRole("button", { name: "Golo", exact: true })).toBeEnabled();
+    await expect(page.getByLabel("Cronómetro")).not.toHaveText(finishedTime!);
+    await theirs.getByRole("button", { name: "Golo", exact: true }).click();
+    await expect(page.getByLabel("Resultado", { exact: true })).toHaveText("0 – 1");
+    expect(rows.slice(0, history.length)).toEqual(history);
+    await page.getByRole("button", { name: "Terminar 2.ª Parte", exact: true }).click();
+    await dialog.getByRole("button", { name: "Terminar jogo", exact: true }).click();
+    await expect(page.getByText("Terminado", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Resultado", { exact: true })).toHaveText("0 – 1");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }
@@ -162,3 +213,51 @@ test("Jogo ao Vivo: erro de gravação preserva o marcador e permite corrigir", 
   await dialog.getByRole("button", { name: "Cancelar", exact: true }).click();
   await expect(page.getByLabel("Resultado", { exact: true })).toHaveText("0 – 0");
 });
+
+for (const role of ["ADMIN", "COACH", "VIEWER"] as const) {
+  test(`Reabrir jogo no detalhe e no Live: permissões de ${role}`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 850 });
+    await page.route("**/auth/me", (route) => route.fulfill({ json: {
+      user: { id: 1, name: role, email: "test@test.local", role, is_active: true }, csrf_token: "test-csrf",
+    } }));
+    const state: LiveState = {
+      match: { id: 31, season_id: 17, team_id: 23, opponent_id: 24, opponent_name: "Adversário", matchday: 1,
+        kickoff_at: "2026-10-04T14:00:00Z", is_home: true, venue: "Campo", status: "FINISHED", elapsed_seconds: 4237,
+        clock_started_at: null, created_at: "2026-10-01T12:00:00Z" },
+      server_now: "2026-10-04T16:00:00Z", clock_elapsed_seconds: 4237, period: 2,
+      score: { us: 1, opponent: 0 }, squad: [],
+      events: [{ id: 1, match_id: 31, event_type: "GOAL", team: "OPPONENT", player_id: null, related_player_id: null,
+        period: 2, elapsed_seconds: 4200, created_at: "2026-10-04T15:55:00Z" }],
+    };
+    let reopenRequests = 0;
+    await page.route("**/matches/31**", (route) => {
+      if (route.request().isNavigationRequest() || !route.request().url().includes(":8000/")) return route.continue();
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith("/squad")) return route.fulfill({ json: [] });
+      if (path === "/matches/31") return route.fulfill({ json: { ...state.match, score: state.score } });
+      if (path.endsWith("/reopen")) {
+        reopenRequests++;
+        if (reopenRequests === 1) return route.fulfill({ status: 409, json: { detail: "Só pode reabrir um jogo terminado." } });
+        state.match.status = "SECOND_HALF";
+      }
+      return route.fulfill({ json: state });
+    });
+    await page.goto("/matches/31/live");
+    await expect(page.getByRole("button", { name: "Reabrir jogo", exact: true })).toHaveCount(role === "VIEWER" ? 0 : 1);
+    await page.goto("/matches/31");
+    await expect(page.getByRole("heading", { name: "Convocatória", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reabrir jogo", exact: true })).toHaveCount(role === "VIEWER" ? 0 : 1);
+    if (role === "VIEWER") { expect(reopenRequests).toBe(0); return; }
+    await page.getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Só pode reabrir um jogo terminado.");
+    await expect(page.getByText("Terminado", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+    await expect(page).toHaveURL(/\/matches\/31\/live$/);
+    await expect(page.getByRole("button", { name: "Retomar 2.ª Parte", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Cronómetro")).toHaveText("70:37");
+    await expect(page.getByLabel("Resultado", { exact: true })).toHaveText("1 – 0");
+    await expect(page.getByRole("region", { name: "Acontecimentos" }).getByRole("listitem")).toHaveCount(1);
+  });
+}

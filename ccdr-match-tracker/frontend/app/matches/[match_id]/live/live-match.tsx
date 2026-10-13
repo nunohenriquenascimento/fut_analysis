@@ -11,6 +11,7 @@ import { PrimaryButton, SecondaryButton, DangerButton, LoadingState, SectionHead
 import MatchScoreboard from "@/components/match-scoreboard";
 import { EVENT_LABELS, NEXT_ACTION, formatClock, liveApi, timelineText, type EventFields, type EventTeam, type EventType, type LiveState, type MatchEvent } from "@/lib/live";
 import EventDialog, { DeleteDialog } from "./event-dialog";
+import LiveStateDialog from "@/components/live-state-dialog";
 
 const EVENT_GROUPS: { title: string; events: EventType[] }[] = [
   { title: "Ofensivos", events: ["GOAL", "SHOT_ON_TARGET", "SHOT_OFF_TARGET", "SHOT_BLOCKED", "OFFSIDE"] },
@@ -29,7 +30,7 @@ function Clock({ state }: { state: LiveState }) {
   const [seconds, setSeconds] = useState(state.clock_elapsed_seconds);
   useEffect(() => {
     const anchor = performance.now();
-    const running = state.match.status === "FIRST_HALF" || state.match.status === "SECOND_HALF";
+    const running = (state.match.status === "FIRST_HALF" || state.match.status === "SECOND_HALF") && state.match.clock_started_at !== null;
     // Backend timestamp supplies the snapshot; monotonic browser time only interpolates it.
     const serverNow = Date.parse(state.server_now);
     const start = state.match.clock_started_at ? Date.parse(state.match.clock_started_at) : serverNow;
@@ -49,6 +50,8 @@ export default function LiveMatch({ matchId }: { matchId: number }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [confirmation, setConfirmation] = useState<"finish" | "reopen" | null>(null);
+  const [undoAvailable, setUndoAvailable] = useState(false);
   const [draft, setDraft] = useState<(EventFields & { id?: number }) | null>(null);
   const [deleting, setDeleting] = useState<MatchEvent | null>(null);
   const [reload, setReload] = useState(0);
@@ -99,12 +102,19 @@ export default function LiveMatch({ matchId }: { matchId: number }) {
     return () => { cancelled = true; mounted.current = false; invalidate(); };
   }, [matchId, reload, invalidate]);
 
+  useEffect(() => {
+    if (!undoAvailable) return;
+    const timer = window.setTimeout(() => setUndoAvailable(false), 10000);
+    return () => window.clearTimeout(timer);
+  }, [undoAvailable]);
+
   async function mutate(operation: () => Promise<LiveState>, message: string) {
     if (locked.current || loading) return;
-    locked.current = true; setBusy(true); setError(""); setNotice("");
+    locked.current = true; setBusy(true); setError(""); setNotice(""); setUndoAvailable(false);
     generation.current++;
     try {
-      setState(await operation()); setDraft(null); setDeleting(null); setNotice(message);
+      setState(await operation()); setDraft(null); setDeleting(null); setConfirmation(null); setNotice(message);
+      setUndoAvailable(message === "Jogo terminado");
     } catch (reason) { setError(errorText(reason)); }
     finally { locked.current = false; setBusy(false); if (pending.current) void refreshRealtime(); }
   }
@@ -116,7 +126,8 @@ export default function LiveMatch({ matchId }: { matchId: number }) {
     else setDraft(fields);
   }
 
-  const running = state?.match.status === "FIRST_HALF" || state?.match.status === "SECOND_HALF";
+  const running = !!state && (state.match.status === "FIRST_HALF" || state.match.status === "SECOND_HALF") && state.match.clock_started_at !== null;
+  const paused = state?.match.status === "SECOND_HALF" && state.match.clock_started_at === null;
   const action = state ? NEXT_ACTION[state.match.status] : undefined;
   return <PageContainer className="live-page">
     <div className="page-content space-y-6">
@@ -124,14 +135,21 @@ export default function LiveMatch({ matchId }: { matchId: number }) {
       {loading && <LoadingState>A carregar o jogo ao vivo…</LoadingState>}
       <p role="status" className="text-sm text-muted" aria-label="Ligação em tempo real">{socketStatus === "connected" ? "🟢 Tempo real ligado" : socketStatus === "reconnecting" ? "🟡 A reconectar" : "🔴 Sem tempo real"}</p>
       {syncError && <p className="text-sm text-warning">{syncError}</p>}
-      {error && !draft && !deleting && <p role="alert" className="rounded-xl border border-error p-3 text-error">{error}</p>}
+      {error && !draft && !deleting && !confirmation && <p role="alert" className="rounded-xl border border-error p-3 text-error">{error}</p>}
       <SecondaryButton disabled={loading || busy || !!draft || !!deleting} onClick={() => { setLoading(true); setNotice(""); setReload((value) => value + 1); }}>Atualizar estado</SecondaryButton>
       {state && <>
         <header className="live-scorecard sticky top-0 z-10 rounded-2xl border border-border p-3 text-center">
           <h1 className="sr-only">Jogo ao Vivo · {state.match.opponent_name}</h1>
           <MatchScoreboard match={state.match} score={state.score}><Clock state={state} /></MatchScoreboard>
         </header>
-        {canEdit && action && <PrimaryButton disabled={loading || busy} onClick={() => void mutate(() => liveApi.transition(matchId, action.status), "Estado do jogo atualizado.")} className="w-full">{busy ? "A guardar…" : action.label}</PrimaryButton>}
+        {canEdit && paused && <PrimaryButton disabled={loading || busy} onClick={() => void mutate(() => liveApi.resume(matchId), "Relógio retomado.")} className="w-full">Retomar 2.ª Parte</PrimaryButton>}
+        {canEdit && action && (action.status === "FINISHED"
+          ? <DangerButton disabled={loading || busy} onClick={() => { setError(""); setConfirmation("finish"); }} className="mt-4">Terminar 2.ª Parte</DangerButton>
+          : <PrimaryButton disabled={loading || busy} onClick={() => void mutate(() => liveApi.transition(matchId, action.status), "Estado do jogo atualizado.")} className="w-full">{busy ? "A guardar…" : action.label}</PrimaryButton>)}
+        {canEdit && state.match.status === "FINISHED" && <SecondaryButton disabled={loading || busy} onClick={() => { setError(""); setConfirmation("reopen"); }}>Reabrir jogo</SecondaryButton>}
+        {paused && <p role="status" className="text-sm text-muted">Cronómetro parado. Escolhe Retomar 2.ª Parte para continuar.</p>}
+        {canEdit && state.match.status === "FINISHED" && undoAvailable && <div role="status" className="flex flex-wrap items-center gap-3"><span>Jogo terminado</span><SecondaryButton disabled={busy || loading} onClick={() => void mutate(() => liveApi.reopen(matchId), "Jogo reaberto. Cronómetro parado.")}>Desfazer</SecondaryButton></div>}
+        {canEdit && confirmation && <LiveStateDialog mode={confirmation} busy={busy} error={error} onClose={() => { setConfirmation(null); setError(""); }} onConfirm={() => void mutate(() => confirmation === "finish" ? liveApi.transition(matchId, "FINISHED") : liveApi.reopen(matchId), confirmation === "finish" ? "Jogo terminado" : "Jogo reaberto. Cronómetro parado.")} />}
         {notice && <p role="status" className="text-sm text-success">{notice}</p>}
         {!running && <p className="text-sm text-muted">O registo de novos acontecimentos está disponível durante as partes em curso.</p>}
         {canEdit && <div className="grid grid-cols-2 gap-2">

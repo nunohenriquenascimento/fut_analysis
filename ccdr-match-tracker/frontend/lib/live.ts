@@ -33,9 +33,11 @@ export const NEXT_ACTION: Partial<Record<MatchStatus, { status: TransitionStatus
   SCHEDULED: { status: "FIRST_HALF", label: "Iniciar 1.ª parte" },
   FIRST_HALF: { status: "HALF_TIME", label: "Terminar 1.ª parte" },
   HALF_TIME: { status: "SECOND_HALF", label: "Iniciar 2.ª parte" },
-  SECOND_HALF: { status: "FINISHED", label: "Terminar jogo" },
+  SECOND_HALF: { status: "FINISHED", label: "Terminar 2.ª Parte" },
 };
 export const liveApi = {
+  reopen: (id: number) => request<LiveState>(`/matches/${id}/reopen`, { method: "POST" }),
+  resume: (id: number) => request<LiveState>(`/matches/${id}/resume`, { method: "POST" }),
   get: (id: number) => request<LiveState>(`/matches/${id}/live`),
   transition: (id: number, status: TransitionStatus) => request<LiveState>(`/matches/${id}/transition`, { method: "POST", body: JSON.stringify({ status }) }),
   createEvent: (id: number, fields: EventFields) => request<LiveState>(`/matches/${id}/events`, { method: "POST", body: JSON.stringify(fields) }),

@@ -1,5 +1,6 @@
 from app.auth import current_user, require_editor
 from collections.abc import Callable
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +17,7 @@ from app.live_socket import MessageType, notify_live
 
 router = APIRouter(prefix="/matches/{match_id}", tags=["live"])
 Database = Annotated[Session, Depends(get_db)]
+logger = logging.getLogger(__name__)
 
 
 def mutate(db: Session, match_id: int, operation: Callable[[Match], object], kind: MessageType, actor_id: int) -> LiveState:
@@ -44,6 +46,18 @@ def live_state(match_id: int, db: Database):
 @router.post("/transition", response_model=LiveState, dependencies=[Depends(require_editor)])
 def change_state(match_id: int, payload: Transition, db: Database, user: Editor):
     return mutate(db, match_id, lambda match: live.transition(match, payload.status, live.utcnow()), "live.state_changed", user.id)
+
+
+@router.post("/reopen", response_model=LiveState)
+def reopen_match(match_id: int, db: Database, user: Editor):
+    response = mutate(db, match_id, live.reopen, "live.state_changed", user.id)
+    logger.info("Match reopened match_id=%s actor_id=%s", match_id, user.id)
+    return response
+
+
+@router.post("/resume", response_model=LiveState)
+def resume_match(match_id: int, db: Database, user: Editor):
+    return mutate(db, match_id, lambda match: live.resume(match, live.utcnow()), "live.state_changed", user.id)
 
 
 @router.get("/events", response_model=list[EventRead], dependencies=[Depends(current_user)])

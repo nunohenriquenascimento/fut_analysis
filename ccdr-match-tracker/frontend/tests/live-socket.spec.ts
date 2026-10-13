@@ -38,7 +38,15 @@ async function liveServer(context: BrowserContext) {
     const method = request.method();
     let type: string | null = null;
     if (method !== "GET") expect(request.headers()["x-csrf-token"]).toBe("socket-csrf");
-    if (path.endsWith("/transition")) {
+    if (path.endsWith("/reopen")) {
+      expect(state.match.status).toBe("FINISHED");
+      state.match.status = "SECOND_HALF";
+      state.match.clock_started_at = null;
+      type = "live.state_changed";
+    } else if (path.endsWith("/resume")) {
+      state.match.clock_started_at = new Date().toISOString();
+      type = "live.state_changed";
+    } else if (path.endsWith("/transition")) {
       state.match.status = request.postDataJSON().status;
       state.match.clock_started_at = state.match.status === "SECOND_HALF" ? new Date().toISOString() : null;
       state.period = state.match.status === "HALF_TIME" ? 1 : 2;
@@ -90,9 +98,25 @@ test("Duas páginas sincronizam eventos, resultado, partes e preservam formulár
   await first.getByRole("button", { name: "Iniciar 2.ª parte", exact: true }).click();
   await expect(second.getByText("2.ª parte", { exact: true })).toBeVisible();
   expect(clock).toMatch(/^01:/);
+  await theirs(first).getByRole("button", { name: "Golo", exact: true }).click();
+  await expect(second.getByLabel("Resultado", { exact: true })).toHaveText("0 – 1");
+  await first.getByRole("button", { name: "Terminar 2.ª Parte", exact: true }).click();
+  await first.getByRole("dialog").getByRole("button", { name: "Terminar jogo", exact: true }).click();
+  await expect(second.getByText("Terminado", { exact: true })).toBeVisible();
+  await first.getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+  await first.getByRole("dialog").getByRole("button", { name: "Reabrir jogo", exact: true }).click();
+  for (const page of [first, second]) {
+    await expect(page.getByRole("button", { name: "Retomar 2.ª Parte", exact: true })).toBeVisible();
+    await expect(page.getByText("Terminado", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Cronómetro")).toHaveText("01:05");
+    await expect(timeline(page).getByRole("listitem")).toHaveCount(1);
+    await expect(page.getByLabel("Resultado", { exact: true })).toHaveText("0 – 1");
+  }
+  await first.getByRole("button", { name: "Retomar 2.ª Parte", exact: true }).click();
+  await expect(theirs(second).getByRole("button", { name: "Golo", exact: true })).toBeEnabled();
   // Out-of-order/duplicate invalidations always fetch current server state.
   server.notify("live.event_deleted"); server.notify("live.event_created");
-  await expect(timeline(second).getByRole("listitem")).toHaveCount(0);
+  await expect(timeline(second).getByRole("listitem")).toHaveCount(1);
   server.state.match.status = "CANCELLED"; server.state.match.clock_started_at = null; server.notify("live.cancelled");
   await expect(second.getByText("Cancelado", { exact: true })).toBeVisible();
   expect(await second.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

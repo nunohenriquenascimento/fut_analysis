@@ -196,3 +196,55 @@ def test_notification_failure_does_not_rollback_committed_http_write(sockets, mo
     assert client.post(base + '/transition', json={'status': 'FIRST_HALF'}, headers=headers['COACH']).status_code == 200
     assert client.post(base + '/events', json={'event_type': 'GOAL', 'team': 'OPPONENT'}, headers=headers['COACH']).status_code == 201
     assert client.get(base + '/live', headers=headers['VIEWER']).json()['score']['opponent'] == 1
+
+
+def finish_game(client, base, headers):
+    for status in ['FIRST_HALF', 'HALF_TIME', 'SECOND_HALF', 'FINISHED']:
+        assert client.post(base + '/transition', json={'status': status}, headers=headers).status_code == 200
+
+
+@pytest.mark.parametrize('role', ['ADMIN', 'COACH', 'VIEWER'])
+def test_reopen_resume_permissions_and_two_socket_notifications(sockets, role):
+    client, _, ids, users, _, headers = sockets
+    base = f'/matches/{ids[0]}'
+    finish_game(client, base, headers['COACH'])
+    if role == 'VIEWER':
+        assert client.post(base + '/reopen', headers=headers[role]).status_code == 403
+        assert client.post(base + '/resume', headers=headers[role]).status_code == 403
+        assert client.get(base + '/live', headers=headers[role]).json()['match']['status'] == 'FINISHED'
+        return
+    with client.websocket_connect(f'/ws/matches/{ids[0]}/live', headers=headers['COACH']) as coach, client.websocket_connect(f'/ws/matches/{ids[0]}/live', headers=headers['VIEWER']) as viewer:
+        assert update(coach)['data']['match']['status'] == 'FINISHED'
+        assert update(viewer)['data']['match']['status'] == 'FINISHED'
+        response = client.post(base + '/reopen', headers=headers[role])
+        assert response.status_code == 200
+        for socket in [coach, viewer]:
+            message = update(socket)
+            assert message['type'] == 'live.state_changed' and message['actor_id'] == users[role]
+        current = client.get(base + '/live', headers=headers['VIEWER']).json()
+        assert current['match']['status'] == 'SECOND_HALF' and current['match']['clock_started_at'] is None
+        assert client.post(base + '/resume', headers=headers[role]).status_code == 200
+        for socket in [coach, viewer]:
+            assert update(socket)['type'] == 'live.state_changed'
+
+
+def test_concurrent_reopen_only_one_succeeds(sockets):
+    client, _, ids, _, _, headers = sockets
+    base = f'/matches/{ids[0]}'
+    finish_game(client, base, headers['ADMIN'])
+    before = client.get(base + '/live', headers=headers['VIEWER']).json()
+    from threading import Barrier
+    barrier = Barrier(2)
+
+    def reopen(role):
+        barrier.wait(timeout=10)
+        return client.post(base + '/reopen', headers=headers[role])
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(reopen, ['ADMIN', 'COACH']))
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    current = client.get(base + '/live', headers=headers['VIEWER']).json()
+    assert current['match']['status'] == 'SECOND_HALF'
+    assert current['match']['clock_started_at'] is None
+    assert current['clock_elapsed_seconds'] == before['clock_elapsed_seconds']
+    assert current['events'] == before['events'] and current['score'] == before['score']

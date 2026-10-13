@@ -26,9 +26,11 @@ def utcnow() -> datetime:
 def elapsed(match: Match, now: datetime) -> int:
     seconds = match.elapsed_seconds
     if match.status in RUNNING:
-        if match.clock_started_at is None:
+        # Reopened second halves use the existing NULL anchor as a paused clock.
+        if match.clock_started_at is None and match.status != MatchStatus.SECOND_HALF:
             raise HTTPException(409, "Relógio inconsistente: falta o início da parte.")
-        seconds += max(0, int((now - match.clock_started_at).total_seconds()))
+        if match.clock_started_at is not None:
+            seconds += max(0, int((now - match.clock_started_at).total_seconds()))
     return seconds
 
 
@@ -46,6 +48,20 @@ def transition(match: Match, target: str, now: datetime) -> None:
     match.elapsed_seconds = elapsed(match, now)
     match.status = MatchStatus(target)
     match.clock_started_at = now if match.status in RUNNING else None
+
+
+def reopen(match: Match) -> None:
+    if match.status != MatchStatus.FINISHED:
+        raise HTTPException(409, "Só pode reabrir um jogo terminado.")
+    match.status = MatchStatus.SECOND_HALF
+    # FINISHED already accumulated the played seconds. Do not include downtime.
+    match.clock_started_at = None
+
+
+def resume(match: Match, now: datetime) -> None:
+    if match.status != MatchStatus.SECOND_HALF or match.clock_started_at is not None:
+        raise HTTPException(409, "Só pode retomar a segunda parte com o relógio parado.")
+    match.clock_started_at = now
 
 
 def events(db: Session, match_id: int) -> list[MatchEvent]:
@@ -102,7 +118,7 @@ def validate_event(db: Session, match: Match, data: EventCreate) -> None:
 
 
 def create_event(db: Session, match: Match, data: EventCreate) -> MatchEvent:
-    if match.status not in RUNNING:
+    if match.status not in RUNNING or match.clock_started_at is None:
         raise HTTPException(409, "Só pode registar acontecimentos durante uma parte em curso.")
     validate_event(db, match, data)
     row = MatchEvent(match_id=match.id, **data.model_dump(), period=period(match), elapsed_seconds=elapsed(match, utcnow()))

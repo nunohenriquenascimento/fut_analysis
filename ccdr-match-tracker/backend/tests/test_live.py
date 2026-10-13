@@ -5,7 +5,7 @@ from sqlalchemy import select, event
 from sqlalchemy.exc import IntegrityError
 
 from app import live_service
-from app.models import Match, MatchEvent
+from app.models import Match, MatchEvent, MatchSquad
 from app.enums import MatchStatus
 from test_matches import games, create, squad  # noqa: F401 -- shared isolated PostgreSQL fixture
 
@@ -191,3 +191,98 @@ def test_event_cannot_be_changed_through_another_match(live_game):
     assert client.patch(path, json={"event_type": "CORNER"}).status_code == 404
     assert client.delete(path).status_code == 404
     assert client.get(base).json()["score"] == {"us": 0, "opponent": 1}
+
+
+def finish(client, base):
+    start(client, base)
+    for status in ["HALF_TIME", "SECOND_HALF", "FINISHED"]:
+        assert client.post(base + "/transition", json={"status": status}).status_code == 200
+
+
+def test_reopen_preserves_history_clock_and_statistics(live_game):
+    client, db, base, ids, now = live_game
+    start(client, base)
+    now[0] += timedelta(seconds=2701)
+    client.post(base + "/transition", json={"status": "HALF_TIME"})
+    now[0] += timedelta(minutes=15)
+    client.post(base + "/transition", json={"status": "SECOND_HALF"})
+    now[0] += timedelta(seconds=1203)
+    for kind in ["GOAL", "YELLOW_CARD", "SHOT_ON_TARGET", "SUBSTITUTION"]:
+        post(client, base, event_type=kind, team="US", player_id=ids[0],
+             related_player_id=ids[1] if kind == "SUBSTITUTION" else None)
+    before = client.post(base + "/transition", json={"status": "FINISHED"}).json()
+    squad_before = [(row.id, row.player_id, row.is_starter, row.created_at)
+                    for row in db.scalars(select(MatchSquad))]
+    stats_before = client.get(base + "/stats").json()
+    season_before = client.get("/statistics/season").json()
+    assert season_before["competitive"]["matches"] == 1
+    now[0] += timedelta(hours=3)
+    response = client.post(base + "/reopen")
+    assert response.status_code == 200, response.text
+    reopened = response.json()
+    assert reopened["match"]["status"] == "SECOND_HALF"
+    assert reopened["match"]["clock_started_at"] is None
+    assert reopened["clock_elapsed_seconds"] == before["clock_elapsed_seconds"] == 3904
+    assert reopened["events"] == before["events"]
+    assert all(row["recorded_by_id"] is not None for row in reopened["events"])
+    assert reopened["squad"] == before["squad"] and reopened["score"] == before["score"]
+    assert [(row.id, row.player_id, row.is_starter, row.created_at)
+            for row in db.scalars(select(MatchSquad))] == squad_before
+    stats_after = client.get(base + "/stats").json()
+    assert stats_after["is_final"] is False
+    for key in ["timeline", "comparison", "score", "total_events"]:
+        assert stats_after[key] == stats_before[key]
+    season_after = client.get("/statistics/season").json()
+    assert season_after["competitive"]["matches"] == 0
+    for key in ["comparison", "players", "rankings", "total_events"]:
+        assert season_after[key] == season_before[key]
+    now[0] += timedelta(minutes=5)
+    assert client.get(base + "/live").json()["clock_elapsed_seconds"] == 3904
+    assert client.post(base + "/events", json={"event_type": "CORNER", "team": "US"}).status_code == 409
+    assert client.post(base + "/resume").status_code == 200
+    assert client.post(base + "/resume").status_code == 409
+    now[0] += timedelta(seconds=37)
+    state = post(client, base, event_type="GOAL", team="US", player_id=ids[0])
+    assert state["events"][-1]["elapsed_seconds"] == 3941
+    final = client.post(base + "/transition", json={"status": "FINISHED"}).json()
+    assert final["clock_elapsed_seconds"] == 3941
+    assert final["events"][:4] == before["events"]
+    assert final["score"] == {"us": 2, "opponent": 0}
+    assert client.get("/statistics/season").json()["competitive"]["goals_for"] == 2
+    assert client.get("/statistics/season").json()["competitive"]["matches"] == 1
+
+
+@pytest.mark.parametrize("status", ["SCHEDULED", "FIRST_HALF", "HALF_TIME", "SECOND_HALF", "CANCELLED"])
+def test_reopen_rejects_other_states(live_game, status):
+    client, db, base, _, now = live_game
+    match = db.get(Match, int(base.split("/")[-1]))
+    match.status = MatchStatus(status)
+    match.clock_started_at = now[0] if status in {"FIRST_HALF", "SECOND_HALF"} else None
+    db.commit()
+    before = client.get(base + "/live").json()
+    assert client.post(base + "/reopen").status_code == 409
+    assert client.get(base + "/live").json() == before
+    assert client.post(base + "/resume").status_code == 409
+
+
+def test_reopen_missing_patch_bypass_and_rollback(live_game):
+    client, db, base, _, _ = live_game
+    finish(client, base)
+    before = client.get(base + "/live").json()
+    assert client.post("/matches/2147483647/reopen").status_code == 404
+    assert client.post("/matches/2147483647/resume").status_code == 404
+    assert client.patch(base, json={"status": "SECOND_HALF"}).status_code == 422
+    assert client.post(base + "/transition", json={"status": "SECOND_HALF"}).status_code == 409
+
+    def fail_flush(*args):
+        raise IntegrityError("injected failure", {}, Exception("test"))
+
+    event.listen(db, "before_flush", fail_flush, once=True)
+    try:
+        assert client.post(base + "/reopen").status_code == 409
+    finally:
+        event.remove(db, "before_flush", fail_flush)
+    assert client.get(base + "/live").json() == before
+    assert client.post(base + "/reopen").status_code == 200
+    # Finishing again without resuming must also retain the frozen time.
+    assert client.post(base + "/transition", json={"status": "FINISHED"}).status_code == 200
