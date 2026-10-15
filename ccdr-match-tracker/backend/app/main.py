@@ -9,6 +9,8 @@ from app.api import router
 from app.live_api import router as live_router
 from app.merge_api import router as merge_router
 from app.statistics_api import router as statistics_router
+from app.competition_api import router as competition_router
+from app.fpf_api import router as fpf_router
 from app.config import get_settings
 from app.auth_api import router as auth_router
 from app.live_socket import router as socket_router
@@ -28,6 +30,8 @@ app.include_router(merge_router)
 app.include_router(router)
 app.include_router(live_router)
 app.include_router(statistics_router)
+app.include_router(competition_router)
+app.include_router(fpf_router)
 app.include_router(socket_router)
 app.middleware("http")(auth_debug_middleware)
 

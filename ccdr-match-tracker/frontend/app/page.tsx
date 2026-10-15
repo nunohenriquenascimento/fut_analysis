@@ -8,6 +8,7 @@ const destinations = [
   { href: "/matches", icon: "▦", title: "Jogos", text: "Preparar jornadas e escolher os convocados." },
   { href: "/matches", icon: "◉", title: "Jogo ao Vivo", text: "Escolher jogo e registar cada acontecimento." },
   { href: "/statistics", icon: "▥", title: "Estatísticas", text: "A época, os resultados e os jogadores em números." },
+  { href: "/competitions", icon: "▤", title: "Campeonato", text: "Classificação, resultados, calendário e equipas." },
 ];
 export default function Home() {
   return <PageContainer className="wide-page"><div className="page-content">

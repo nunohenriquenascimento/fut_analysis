@@ -1,0 +1,22 @@
+{
+  "synthetic_only": true,
+  "port": 50911,
+  "application_revision": "0006",
+  "application_schema_matches_0006": true,
+  "archive_sha256": "35923d954ee3d956313e70dd7714a84a2edb2c9f22ad93e2cae36212e921f909",
+  "restored_data_identical": true,
+  "restored_schema_identical": true,
+  "sequences_restored": true,
+  "after_revision": "0007",
+  "existing_data_preserved": true,
+  "alembic_check": "No new upgrade operations detected.",
+  "read_smoke_statuses": {
+    "/competitions": 200,
+    "/players": 200,
+    "/matches/1": 200,
+    "/matches/1/live": 200,
+    "/matches/1/stats": 200
+  },
+  "success": true,
+  "isolated_server_stopped": true
+}

@@ -54,7 +54,7 @@ for (const width of [360, 390, 430, 768, 1280]) {
     await mkdir(preview, { recursive: true });
     await page.goto("/");
     await expect(page.getByRole("heading", { name: context.team_name, exact: true })).toBeVisible();
-    await expect(page.getByRole("main").getByRole("link")).toHaveCount(4);
+    await expect(page.getByRole("main").getByRole("link")).toHaveCount(5);
     await expect(page.getByRole("main").getByRole("img", { name: `Emblema de ${context.team_name}` })).toBeVisible();
     // Keyboard navigation starts with a visible skip link and reaches the content.
     await page.keyboard.press("Tab");

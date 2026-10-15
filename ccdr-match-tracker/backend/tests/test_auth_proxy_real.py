@@ -76,7 +76,14 @@ def test_real_caddy_http_cookie_and_websocket_upgrade(sockets, monkeypatch, tmp_
                 assert json.loads(ws.recv(timeout=5))['type'] == 'live.snapshot'
                 response = client.post(f'/api/matches/{ids[0]}/events', json={'event_type': 'GOAL', 'team': 'OPPONENT'})
                 assert response.status_code == 201
-                message = json.loads(ws.recv(timeout=5))
+                deadline = time.monotonic() + 5
+                while True:
+                    remaining = deadline - time.monotonic()
+                    assert remaining > 0, 'Event notification timed out'
+                    message = json.loads(ws.recv(timeout=remaining))
+                    if message['type'] != 'live.ping':
+                        break
+                    ws.send('pong')
                 assert message['type'] == 'live.event_created' and message['actor_id'] == users['COACH']
             assert client.post('/api/auth/logout').status_code == 204
             assert client.get('/api/auth/me').status_code == 401

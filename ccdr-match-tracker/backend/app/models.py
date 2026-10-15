@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, String, UniqueConstraint, func
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -52,6 +52,50 @@ class Team(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(160), unique=True)
     crest_path: Mapped[str | None] = mapped_column(String(500))
+
+
+class Competition(TimestampMixin, Base):
+    __tablename__ = "competitions"
+    __table_args__ = (UniqueConstraint("season_id", "name"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id"))
+    internal_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    name: Mapped[str] = mapped_column(String(120))
+    # An explicit provisional policy, never presented as an official regulation.
+    rules: Mapped[dict] = mapped_column(JSON)
+    # Last parsed official capture, never internal events or player registrations.
+    fpf_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+class CompetitionTeam(Base):
+    __tablename__ = "competition_teams"
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id"), primary_key=True)
+    team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"), primary_key=True)
+
+
+class CompetitionFixture(TimestampMixin, Base):
+    __tablename__ = "competition_fixtures"
+    __table_args__ = (
+        UniqueConstraint("competition_id", "external_key", name="uq_fixture_external_key"),
+        UniqueConstraint("competition_id", "matchday", "home_team_id", "away_team_id", name="uq_fixture_pair_matchday"),
+        UniqueConstraint("internal_match_id"),
+        CheckConstraint("home_team_id <> away_team_id", name="fixture_different_teams"),
+        CheckConstraint("matchday > 0", name="fixture_positive_matchday"),
+        CheckConstraint("(home_goals IS NULL AND away_goals IS NULL) OR (home_goals >= 0 AND away_goals >= 0 AND home_goals IS NOT NULL AND away_goals IS NOT NULL)", name="fixture_valid_score"),
+        CheckConstraint("internal_match_id IS NULL OR (home_goals IS NULL AND away_goals IS NULL)", name="fixture_internal_no_score"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    competition_id: Mapped[int] = mapped_column(ForeignKey("competitions.id"))
+    external_key: Mapped[str] = mapped_column(String(120))
+    matchday: Mapped[int]
+    home_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    away_team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    kickoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    venue: Mapped[str | None] = mapped_column(String(160))
+    internal_match_id: Mapped[int | None] = mapped_column(ForeignKey("matches.id"))
+    home_goals: Mapped[int | None]
+    away_goals: Mapped[int | None]
+    source: Mapped[str] = mapped_column(String(500))
 
 
 class Player(TimestampMixin, Base):

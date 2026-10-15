@@ -1,9 +1,9 @@
 """Match and squad rules, shared by the HTTP endpoints."""
 from fastapi import HTTPException
-from sqlalchemy import exists, func, or_, select, text
+from sqlalchemy import exists, or_, select, text
 from sqlalchemy.orm import Session
 
-from app.models import Match, MatchEvent, MatchSquad, Player, Team
+from app.models import CompetitionFixture, Match, MatchEvent, MatchSquad, Player, Team
 from app.enums import MatchStatus
 from app.schemas import PlayerRead, SquadEntry, SquadPlayer
 
@@ -22,6 +22,8 @@ def deletable(db: Session, match: Match) -> bool:
     """Current stored history only; never cascade historical records."""
     if match.status != MatchStatus.SCHEDULED or match.elapsed_seconds != 0 or match.clock_started_at is not None:
         return False
+    if db.scalar(select(CompetitionFixture.id).where(CompetitionFixture.internal_match_id == match.id)) is not None:
+        return False
     return not db.scalar(select(exists().where(MatchSquad.match_id == match.id))) and not db.scalar(
         select(exists().where(MatchEvent.match_id == match.id)))
 
@@ -36,12 +38,18 @@ def cancel_match(match: Match) -> None:
     match.status = MatchStatus.CANCELLED
 
 
+def find_team_by_name(db: Session, name: str) -> Team | None:
+    # PostgreSQL lower() under locale C does not fold accented capitals.
+    # Use the same Unicode key for lookup and locking on every creation path.
+    key = " ".join(name.split()).casefold()
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:name))"), {"name": key})
+    return next((team for team in db.scalars(select(Team).order_by(Team.id))
+                 if " ".join(team.name.split()).casefold() == key), None)
+
+
 def resolve_opponent(db: Session, name: str, team_id: int) -> Team:
     name = " ".join(name.split())
-    # Serialize name-based creation, including requests for different games.
-    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(lower(:name)))"), {"name": name})
-    normalized = func.lower(func.regexp_replace(func.btrim(Team.name), r"\s+", " ", "g"))
-    team = db.scalar(select(Team).where(normalized == func.lower(name)).order_by(Team.id))
+    team = find_team_by_name(db, name)
     if team is not None and team.id == team_id:
         raise HTTPException(409, "A equipa não pode jogar contra si própria.")
     if team is None:

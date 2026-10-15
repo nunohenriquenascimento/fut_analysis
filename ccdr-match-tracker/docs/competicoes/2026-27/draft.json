@@ -1,0 +1,28 @@
+{
+  "status": "RASCUNHO_NAO_IMPORTAR",
+  "competition": {
+    "name": "Liga Dappin 2026/2027",
+    "season": "2026/27",
+    "association": "Associação de Futebol da Guarda",
+    "category": "Juniores A Sub-19 masculino",
+    "modality": "Futebol de 11",
+    "internal_team_name": "CCDR Vila Cortez do Mondego",
+    "season_id": null,
+    "internal_team_id": null,
+    "expected_participant_count": 8
+  },
+  "participants": [],
+  "fixtures": [],
+  "result_sources": [],
+  "rules": {
+    "status": "POR_VALIDAR",
+    "official_document": null,
+    "applicable_season_confirmed": false,
+    "points_article": null,
+    "tiebreakers_article": null,
+    "win_points": null,
+    "draw_points": null,
+    "loss_points": null,
+    "tiebreakers": []
+  }
+}

@@ -13,7 +13,7 @@ from app import live_service as live
 from app.enums import MatchStatus
 from app.match_service import get_match
 from app.merge_schemas import MergeGame, MergePreview, MergeSelection, MergeSquad, TransferEvent
-from app.models import Match, MatchEvent, MatchSquad, Player
+from app.models import CompetitionFixture, Match, MatchEvent, MatchSquad, Player
 from app.live_schemas import EventRead
 from app.schemas import MatchRead, PlayerRead
 from app.statistics_service import comparison
@@ -49,6 +49,8 @@ def plan(db: Session, principal: Match, continuation: Match, selection: MergeSel
     a, b = snapshot(db, principal), snapshot(db, continuation)
     original, incoming = live.events(db, principal.id), live.events(db, continuation.id)
     conflicts, warnings = [], []
+    if db.scalar(select(CompetitionFixture.id).where(CompetitionFixture.internal_match_id == continuation.id)) is not None:
+        conflicts.append("A continuação está ligada ao calendário da competição e não pode ser absorvida.")
     if principal.season_id != continuation.season_id:
         conflicts.append("Os jogos pertencem a épocas diferentes.")
     if principal.team_id != continuation.team_id:

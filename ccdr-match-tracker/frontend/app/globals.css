@@ -63,7 +63,7 @@ body {
 }
 
 * { box-sizing: border-box; }
-:where(button, a, input, select, summary):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; box-shadow: 0 0 0 6px var(--accent); }
+:where(button, a, input, select, summary, textarea, [tabindex]):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; box-shadow: 0 0 0 6px var(--accent); }
 :where(button, select, summary) { cursor: pointer; }
 :where(button, input, select):disabled { cursor: not-allowed; opacity: .55; }
 :where(input, select) { max-width: 100%; min-width: 0; }
@@ -76,7 +76,7 @@ button { white-space: normal; }
 .club-brand strong, .club-brand small { display: block; }
 .club-brand strong { color: var(--secondary); font-weight: 800; }
 .club-brand small { color: var(--muted); margin-top: .2rem; }
-.app-header nav { display: flex; gap: .5rem; margin-top: .5rem; }
+.app-header nav { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
 .app-header nav a { min-height: 48px; padding: .75rem .6rem; font-size: .875rem; border-bottom: 3px solid transparent; }
 .app-header nav a[aria-current] { color: var(--secondary); border-color: var(--primary); font-weight: 750; }
 .skip-link { position: absolute; left: 1rem; top: -8rem; z-index: 50; background: var(--primary); color: var(--on-primary); padding: 1rem; }
@@ -185,3 +185,24 @@ button { white-space: normal; }
   .page-container.wide-page > .page-content { max-width: 64rem; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+
+.competition-nav { display: flex; flex-wrap: wrap; gap: .5rem; }
+.competition-nav a { display: inline-flex; min-height: 48px; align-items: center; border-radius: .85rem; padding: .65rem 1rem; border: 1px solid var(--border); background: var(--surface); color: var(--secondary); }
+.competition-nav a[aria-current] { background: var(--secondary); color: var(--on-secondary); border-color: var(--secondary); }
+.participant-option { display: flex; min-height: 48px; align-items: center; gap: .75rem; border: 1px solid var(--border); border-radius: .85rem; padding: .75rem; overflow-wrap: anywhere; }
+.participant-option input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--secondary); }
+.fixture-card { min-width: 0; }
+.fixture-card:hover { border-color: var(--secondary); }
+.fixture-teams { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); align-items: center; gap: .5rem; text-align: center; }
+.fixture-teams > div { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: .5rem; font-size: .875rem; font-weight: 650; overflow-wrap: anywhere; }
+.standings-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 1rem; background: var(--surface); }
+.standings-table { width: 100%; min-width: 640px; border-collapse: collapse; text-align: center; font-variant-numeric: tabular-nums; }
+.standings-table caption { padding: 1rem; text-align: left; font-weight: 700; color: var(--secondary); }
+.standings-table th, .standings-table td { padding: .85rem .65rem; border-bottom: 1px solid var(--border); }
+.standings-table thead { color: var(--secondary); background: var(--secondary-surface); }
+.standings-table th[scope="row"] { text-align: left; min-width: 160px; max-width: 260px; overflow-wrap: anywhere; }
+.standings-table .our-team { background: var(--secondary-surface); }
+.standings-table td:nth-child(3) { font-weight: 800; color: var(--secondary); }
+.competition-json { display: block; width: 100%; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; border: 1px solid var(--border); border-radius: .85rem; padding: .85rem; font-family: var(--font-geist-mono), monospace; font-size: .8rem; background: var(--surface-raised); }
+textarea.competition-json { resize: vertical; }
+@media (min-width: 768px) { .app-header-inner { flex-wrap: wrap; gap: .75rem; } }

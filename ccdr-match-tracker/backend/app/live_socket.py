@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import Literal
 
-from anyio import from_thread, to_thread
+from anyio import CancelScope, from_thread, to_thread
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -137,8 +137,11 @@ async def match_live_socket(websocket: WebSocket, match_id: int):
         except RuntimeError:
             pass
     finally:
+        # AnyIO cancellation is delivered again at every checkpoint. Unregister
+        # immediately, then shield only cleanup so cancelled child tasks are joined.
+        hub.unsubscribe(match_id, subscriber)
         for task in tasks:
             task.cancel()
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        hub.unsubscribe(match_id, subscriber)
+            with CancelScope(shield=True):
+                await asyncio.gather(*tasks, return_exceptions=True)
