@@ -62,14 +62,15 @@ def test_capture_preview_apply_idempotence_and_internal_preservation(fpf_account
     before = [client.get(path).json() for path in paths]
     preview = client.post(f"/competitions/{cid}/fpf/preview", json=capture)
     assert preview.status_code == 200, preview.text
-    assert len(preview.json()["fixtures"]) == 3
-    assert len(preview.json()["pending_internal_links"]) == 1
+    assert len(preview.json()["fixtures"]) == 4
+    assert len(preview.json()["pending_internal_links"]) == 0
+    assert preview.json()["ignored"][0]["match_id"] == 2682548
     assert db.get(Competition, cid).fpf_data is None
     for _ in range(2):
         response = apply(client, cid, capture)
         assert response.status_code == 200, response.text
-        assert response.json()["imported"] == 3
-    assert db.scalar(select(func.count()).select_from(CompetitionFixture)) == 3
+        assert response.json()["imported"] == 4
+    assert db.scalar(select(func.count()).select_from(CompetitionFixture)) == 4
     assert [client.get(path).json() for path in paths] == before
     official = client.get(f"/competitions/{cid}/fpf").json()
     assert official["source"] == "FPF" and official["available"]
@@ -139,7 +140,7 @@ def test_explicit_internal_link_uses_existing_game_without_official_score(fpf_ac
     client, db, cid, capture, payload, *_ = fpf_account
     match = create(client, {**payload, "opponent_name": "Guarda Fc", "matchday": 3})
     plan = client.post(f"/competitions/{cid}/fpf/preview", json=capture).json()
-    key = plan["pending_internal_links"][0]["external_key"]
+    key = next(f["external_key"] for f in plan["fixtures"] if f["internal_match_id"] == match["id"])
     response = apply(client, cid, {**capture, "internal_match_links": {key: match["id"]}})
     assert response.status_code == 200, response.text
     linked = db.scalar(select(CompetitionFixture).where(CompetitionFixture.internal_match_id == match["id"]))
@@ -171,7 +172,7 @@ def test_verified_match_score_can_update_external_fixture_without_duplication(fp
     db.commit()
     capture = {**capture, "match_rounds": {"2682548": 677922}}
     assert apply(client, cid, capture).status_code == 200
-    key = f"fpf:106:30369:99718:677922:{capture['team_mapping']['Seia Fc']}:{capture['team_mapping']['V. Cortez Mondego-Guarda']}"
+    key = "fpf:match:2682548"
     original = db.scalar(select(CompetitionFixture).where(CompetitionFixture.external_key == key))
     assert (original.home_goals, original.away_goals) == (2, 1)
     original_id = original.id
@@ -181,7 +182,7 @@ def test_verified_match_score_can_update_external_fixture_without_duplication(fp
     db.expire_all()
     corrected = db.scalar(select(CompetitionFixture).where(CompetitionFixture.external_key == key))
     assert corrected.id == original_id and (corrected.home_goals, corrected.away_goals) == (3, 1)
-    assert db.scalar(select(func.count()).select_from(CompetitionFixture)) == 4
+    assert db.scalar(select(func.count()).select_from(CompetitionFixture)) == 5
 
 
 def test_document_detection_uses_real_parsers_without_writes(fpf_account):

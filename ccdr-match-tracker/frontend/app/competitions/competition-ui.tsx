@@ -35,7 +35,7 @@ export function FixtureCards({ fixtures, teams, competitionId }: { fixtures: Com
         <strong className="tabular-nums" aria-label="Resultado">{fixture.status === "SCHEDULED" || fixture.status === "CANCELLED" ? "–" : `${fixture.home_goals ?? "–"} – ${fixture.away_goals ?? "–"}`}</strong>
         <div><TeamCrest name={away?.name ?? "Equipa"} path={away?.crest_path} size="sm" /><span>{away?.name ?? `Equipa #${fixture.away_team_id}`}</span></div>
       </div>
-      <p className="text-sm text-muted">{fixtureDate(fixture.kickoff_at)}</p>
+      <p className="text-sm text-muted">{fixture.kickoff_at ? fixtureDate(fixture.kickoff_at) : fixture.schedule_text ? `Data parcial FPF: ${fixture.schedule_text}` : fixtureDate(null)}</p>
       <p className="mt-2 text-sm text-secondary">{fixture.internal_match_id === null ? "Jogo externo · Ver detalhes e origem" : "Nosso jogo · Resultado dos eventos internos"}</p>
     </Link>;
   })}</div>;

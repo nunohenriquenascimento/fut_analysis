@@ -17,6 +17,7 @@ export interface FixtureInput {
   home_goals?: number | null; away_goals?: number | null; source: string;
 }
 export interface CompetitionFixture extends FixtureInput {
+  schedule_text?: string | null;
   id: number; competition_id: number; status: MatchStatus; created_at: string;
   internal_match_id: number | null; home_goals: number | null; away_goals: number | null;
 }

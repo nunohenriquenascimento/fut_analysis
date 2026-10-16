@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.enums import MatchStatus
 from app.live_service import events, score
 from app.models import Competition, CompetitionFixture, CompetitionTeam, Match, Team
+from app.fpf_source import ORIGIN
 
 
 def get_competition(db, competition_id, lock=False):
@@ -18,13 +19,23 @@ def get_competition(db, competition_id, lock=False):
 
 
 def calendar(db, competition_id):
-    get_competition(db, competition_id)
+    competition = get_competition(db, competition_id)
+    snapshot = competition.fpf_data or {}
+    mapping = snapshot.get("team_mapping", {})
+    schedules = {(capture["matchday"], mapping.get(game["home_name"]), mapping.get(game["away_name"])): game.get("schedule_text")
+                 for capture in snapshot.get("round_captures", {}).values()
+                 if capture["series_id"] == snapshot.get("identity", [None, None, None])[2]
+                 for game in capture["matches"]}
     rows = db.scalars(select(CompetitionFixture).where(CompetitionFixture.competition_id == competition_id)
                       .order_by(CompetitionFixture.matchday, CompetitionFixture.kickoff_at, CompetitionFixture.id))
     result = []
     for row in rows:
         data = {column.name: getattr(row, column.name) for column in CompetitionFixture.__table__.columns}
         data["status"] = "FINISHED" if row.home_goals is not None else "SCHEDULED"
+        if row.internal_match_id is None and row.source.startswith(ORIGIN + "/"):
+            schedule = schedules.get((row.matchday, row.home_team_id, row.away_team_id))
+            if schedule:
+                data["schedule_text"] = schedule
         if row.internal_match_id is not None:
             match = db.get(Match, row.internal_match_id)
             actual_home, actual_away = ((match.team_id, match.opponent_id) if match.is_home else (match.opponent_id, match.team_id))

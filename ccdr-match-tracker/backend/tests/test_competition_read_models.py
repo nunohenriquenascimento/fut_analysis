@@ -57,7 +57,7 @@ def test_correction_recomputes_points_without_cached_totals(table_source):
 
 @pytest.mark.parametrize("home", [True, False])
 def test_calendar_reads_internal_score_without_storing_external_goals(monkeypatch, home):
-    competition = SimpleNamespace(season_id=1)
+    competition = SimpleNamespace(season_id=1, fpf_data=None)
     match = Match(id=7, season_id=1, team_id=1, opponent_id=2, matchday=3,
                   is_home=home, status=MatchStatus.CANCELLED, venue="Internal venue")
     fixture = CompetitionFixture(id=8, competition_id=1, external_key="ours", matchday=3,

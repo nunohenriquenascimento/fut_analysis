@@ -46,6 +46,11 @@ export default function FPFSection({ competition }: { competition: Competition }
   function payload(): FPFCapture | null {
     if (!valid || !series || series.standings.some((row) => !mapping[row.name])) return null;
     return { ...(incoming?.kind === "competition" ? { competition_html: files[documents.indexOf(incoming)].html } : {}), series_id: seriesId,
+      fixture_htmls: documents.filter((doc) => doc.kind === "fixture" && doc.supported).map((doc) => {
+        const file = files[documents.indexOf(doc)];
+        return file.source_url ? { html: file.html, source_url: file.source_url,
+          competition_id: document!.competition_id, season_id: document!.season_id, series_id: seriesId } : file.html;
+      }),
       team_mapping: Object.fromEntries(series.standings.map((row) => [row.name, mapping[row.name]])),
       match_htmls: documents.flatMap((doc, i) => doc.kind === "match" ? [files[i].html] : []), match_rounds: rounds, internal_match_links: links };
   }
@@ -67,7 +72,7 @@ export default function FPFSection({ competition }: { competition: Competition }
       </section></> : !loading && <p className="card text-muted">Dados oficiais ainda não disponíveis. Os dados locais continuam acessíveis.</p>}
     {isAdmin ? <section className="card space-y-4" aria-label="Importar HTML FPF">
       <h2 className="section-header">Importar HTML FPF · ADMIN</h2>
-      <p>Selecione a competição e até oito fichas de jogo. Máximo 2 MB por ficheiro e 4 MB por lote. O HTML é analisado como texto e nunca executado.</p>
+      <p>Selecione a competição, páginas de jornada ou fichas de jogo (até nove ficheiros). Máximo 2 MB por ficheiro e 4 MB por lote. O HTML é analisado como texto e nunca executado.</p>
       {lookupError && <ErrorNotice message={`Mapeamento indisponível: ${lookupError}`} />}
       <fieldset disabled={busy} className="space-y-4">
         <label className="block">Ficheiros HTML FPF<input type="file" accept=".html,.htm,text/html" multiple className="form-field mt-1 py-3" onChange={async (event) => {
@@ -82,6 +87,12 @@ export default function FPFSection({ competition }: { competition: Competition }
           catch { setError("Não foi possível ler os ficheiros."); }
           finally { locked.current = false; setBusy(false); }
         }} /></label>
+        {files.map((file, index) => <label className="block" key={`${file.name}-${index}`}>URL de origem FPF: {file.name}
+          <input type="url" className="form-field mt-1" value={file.source_url ?? ""} placeholder="https://resultados.fpf.pt/Competition/GetClassificationAndMatchesByFixture?fixtureId=…"
+            onChange={(event) => { const value = event.target.value.trim(); invalidate(); setDocuments([]); setPending([]);
+              setFiles((old) => old.map((item, i) => i === index ? { ...item, source_url: value || undefined } : item)); }} />
+          <span className="text-sm text-muted">Obrigatório para fragmentos de jornada sem identidade no HTML. Copie o URL do pedido original; a jornada será validada pela competição.</span>
+        </label>)}
         <PrimaryButton disabled={!files.length} onClick={async () => {
           if (locked.current) return; locked.current = true; setBusy(true); invalidate(); setError("");
           try {
@@ -92,9 +103,10 @@ export default function FPFSection({ competition }: { competition: Competition }
           finally { locked.current = false; setBusy(false); }
         }}>Validar e identificar ficheiros</PrimaryButton>
         {documents.map((doc, i) => <div key={`${doc.name}-${i}`} className="rounded-xl border border-border p-3 break-words"><strong>{doc.name}</strong> · {doc.kind === "competition" ? "Competição" : doc.kind === "match" ? "Ficha de jogo" : doc.kind === "fixture" ? "Jornada" : "Inválido"}
-          {!doc.supported ? <p role="alert" className="text-error">{doc.error}</p> : doc.kind === "competition" ? <p>{doc.data.name} · {doc.data.season} · {doc.data.series.reduce((n, s) => n + s.standings.length, 0)} equipas</p> : <p>{doc.data.home.name} {doc.data.home_goals}–{doc.data.away_goals} {doc.data.away.name} · #{doc.data.match_id}</p>}
+          {!doc.supported ? <p role="alert" className="text-error">{doc.error}</p> : doc.kind === "competition" ? <p>{doc.data.name} · {doc.data.season} · {doc.data.series.reduce((n, s) => n + s.standings.length, 0)} equipas</p> : doc.kind === "fixture" ? <p>{doc.data.matchday ? `Jornada ${doc.data.matchday} · ` : ""}FPF #{doc.data.fixture_id} · {doc.data.matches.length} jogos identificados</p> : <p>{doc.data.home.name} {doc.data.home_goals}–{doc.data.away_goals} {doc.data.away.name} · #{doc.data.match_id}</p>}
         </div>)}
         {documents.filter((doc) => doc.kind === "competition").length > 1 && <p role="alert">Selecione apenas uma captura da competição por lote.</p>}
+        {documents.some((doc) => !doc.supported) && <p className="text-error">{documents.filter((doc) => !doc.supported).length} ficheiro(s) rejeitado(s). Nenhum jogo foi aplicado; corrija os ficheiros antes de confirmar.</p>}
         {valid && !document && <p role="alert">Importe primeiro o HTML da competição para poder associar esta ficha.</p>}
         {valid && document && <div className="space-y-4">
           {incoming?.kind === "competition" && <details className="card"><summary className="min-h-12 py-3 font-semibold">Dados extraídos da competição · Ainda não aplicados</summary><OfficialCompetition document={incoming.data} preview /></details>}
@@ -108,7 +120,7 @@ export default function FPFSection({ competition }: { competition: Competition }
           </select></label>)}</div>
           {matchDocs.map((doc) => <div key={doc.data.match_id} className="space-y-3"><OfficialMatch match={doc.data} anchor={false} /><label className="block">Jornada da ficha #{doc.data.match_id}<select className="form-field mt-1" value={rounds[String(doc.data.match_id)] ?? ""} onChange={(e) => {
             const key = String(doc.data.match_id); setRounds((old) => { const next = { ...old }; if (e.target.value) next[key] = Number(e.target.value); else delete next[key]; return next; }); invalidate();
-          }}><option value="">Sem jornada confirmada · guardar apenas ficha oficial</option>{series?.rounds.map((r) => <option key={r.fixture_id} value={r.fixture_id}>Jornada {r.matchday}</option>)}</select></label></div>)}
+          }}><option value="">Selecionar jornada para importar o jogo local</option>{series?.rounds.map((r) => <option key={r.fixture_id} value={r.fixture_id}>Jornada {r.matchday}</option>)}</select></label></div>)}
           {pending.map((item) => <label key={item.external_key} className="block">Jogo interno: {item.official.home_name} / {item.official.away_name} · Jornada {item.official.matchday}<select className="form-field mt-1" value={links[item.external_key] ?? ""} onChange={(e) => {
             setLinks((old) => { const next = { ...old }; if (e.target.value) next[item.external_key] = Number(e.target.value); else delete next[item.external_key]; return next; }); invalidate();
           }}><option value="">Sem ligação · conservar apenas na captura oficial</option>{matches.filter((match) => match.matchday === item.official.matchday).map((match) => <option key={match.id} value={match.id}>#{match.id} · {match.opponent_name} · {match.is_home ? "Casa" : "Fora"} · {match.status}</option>)}</select></label>)}
@@ -122,6 +134,10 @@ export default function FPFSection({ competition }: { competition: Competition }
         {preview && ready && <section className="space-y-4 border-t border-border pt-4" aria-label="Revisão FPF">
           <h3 className="font-bold">Diferenças antes de aplicar</h3>
           <p>Participantes a associar: {preview.add_participants.length}. Jogos internos pendentes: {preview.pending_internal_links.length}.</p>
+          {preview.summary && <p>Criar: {preview.summary.created} · Atualizar: {preview.summary.updated} · Ignorar: {preview.summary.ignored} · Rejeitar: {preview.summary.rejected}</p>}
+          {preview.ignored?.map((item) => <p role="alert" key={item.match_id}>Ficha #{item.match_id}: {item.reason}</p>)}
+          {preview.pending_internal_links.map((item) => <p role="alert" key={item.external_key}>{item.reason}</p>)}
+          <p className="text-sm text-muted">Os links das jornadas não contêm os jogos. Importe o HTML de cada jornada ou as fichas com jornada confirmada. A classificação local usa apenas jogos importados, não os totais da tabela oficial.</p>
           {preview.add_participants.length > 0 && <ul>{preview.add_participants.map((id) => <li key={id}>{teams.find((team) => team.id === id)?.name ?? `Equipa #${id}`}</li>)}</ul>}
           <ul className="space-y-3">{preview.changes.map((change) => <li key={change.external_key} className="rounded-xl border border-border p-3 break-words">
             <strong>{change.action === "create" ? "Criar jogo externo/ligação" : change.action === "update" ? "Atualizar jogo" : "Sem alterações"}</strong> · Jornada {change.after.matchday}<br />
@@ -142,7 +158,7 @@ export default function FPFSection({ competition }: { competition: Competition }
             if (locked.current) return; locked.current = true; setBusy(true); setError("");
             try {
               const result = await fpfApi.apply(competition.id, { ...ready, expected_state: preview.state_token }, confirmation);
-              setSuccess(`Captura aplicada: ${result.imported} jogo(s); ${result.pending_internal_links.length} ligação(ões) interna(s) pendente(s).`); setPreview(null); setConfirmation("");
+              setSuccess(result.summary ? `Captura aplicada: ${result.summary.created} criados, ${result.summary.updated} atualizados, ${result.summary.ignored} ignorados, ${result.summary.rejected} rejeitados. ${result.ignored?.map((item) => `Ficha #${item.match_id}: ${item.reason}`).join(" ") ?? ""}` : `Captura aplicada: ${result.imported} jogo(s); ${result.pending_internal_links.length} ligação(ões) interna(s) pendente(s).`); setPreview(null); setConfirmation("");
               readGeneration.current++;
               try { setData(await fpfApi.read(competition.id)); setLoading(false); } catch { setError("A captura foi aplicada, mas a leitura falhou. Atualize a captura disponível."); }
             } catch (reason) { setError(fpfError(reason)); setPreview(null); setConfirmation(""); }

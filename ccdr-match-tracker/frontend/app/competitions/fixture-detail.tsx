@@ -21,7 +21,7 @@ export default function FixtureDetail({ fixture, teams, canEdit }: { fixture: Co
       <p className="text-3xl font-bold text-secondary tabular-nums" aria-label="Resultado do jogo">{current.status === "SCHEDULED" || current.status === "CANCELLED" ? "Por disputar" : `${current.home_goals} – ${current.away_goals}`}</p>
       <dl className="space-y-3">
         <div><dt className="text-sm text-muted">Jornada</dt><dd>{current.matchday}</dd></div>
-        <div><dt className="text-sm text-muted">Data e hora de Lisboa</dt><dd>{fixtureDate(current.kickoff_at)}</dd></div>
+        <div><dt className="text-sm text-muted">Data e hora de Lisboa</dt><dd>{current.kickoff_at ? fixtureDate(current.kickoff_at) : current.schedule_text ? `Data parcial FPF: ${current.schedule_text}` : fixtureDate(null)}</dd></div>
         <div><dt className="text-sm text-muted">Local</dt><dd>{current.venue || "Por definir"}</dd></div>
         <div><dt className="text-sm text-muted">Origem do registo</dt><dd className="break-words whitespace-pre-wrap">{current.source}</dd></div>
         <div><dt className="text-sm text-muted">Chave externa</dt><dd className="break-all">{current.external_key}</dd></div>

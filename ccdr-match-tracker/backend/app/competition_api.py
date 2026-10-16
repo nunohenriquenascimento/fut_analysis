@@ -112,7 +112,7 @@ def import_fixtures(competition_id: int, payload: FixtureImport, db: Database):
     return apply_fixture_import(db, competition, payload)
 
 
-def apply_fixture_import(db, competition, payload, *, commit_changes=True, validate_only=False, member_ids=None):
+def apply_fixture_import(db, competition, payload, *, commit_changes=True, validate_only=False, member_ids=None, allow_fpf_external=False):
     """Shared batch validation for manual input and verified FPF mapping."""
     competition_id = competition.id
     members = set(db.scalars(select(CompetitionTeam.team_id).where(CompetitionTeam.competition_id == competition_id)))
@@ -127,10 +127,14 @@ def apply_fixture_import(db, competition, payload, *, commit_changes=True, valid
             raise HTTPException(409, "As equipas têm de participar na competição.")
         previous = existing.get(item.external_key)
         identity = (item.matchday, item.home_team_id, item.away_team_id, item.internal_match_id)
-        if previous and identity != (previous.matchday, previous.home_team_id, previous.away_team_id, previous.internal_match_id):
+        if previous and identity != (previous.matchday, previous.home_team_id, previous.away_team_id, previous.internal_match_id) and not (
+            allow_fpf_external and previous.internal_match_id is None
+            and (item.home_team_id, item.away_team_id) == (previous.home_team_id, previous.away_team_id)
+            and (item.internal_match_id is None or item.matchday == previous.matchday)
+        ):
             raise HTTPException(409, "Uma chave existente não pode identificar outro jogo.")
         if competition.internal_team_id in {item.home_team_id, item.away_team_id}:
-            if item.internal_match_id is None:
+            if item.internal_match_id is None and not allow_fpf_external:
                 raise HTTPException(409, "Jogos da nossa equipa exigem ligação a um jogo interno, sem resultado externo.")
         elif item.internal_match_id is not None:
             raise HTTPException(409, "Apenas jogos da nossa equipa podem ter ligação interna.")

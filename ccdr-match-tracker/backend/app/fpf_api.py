@@ -9,19 +9,29 @@ from sqlalchemy.orm import Session
 from app.auth import current_user, require_admin
 from app.competition_service import get_competition
 from app.database import get_db
-from app.fpf_parser import FPFHTMLInvalid, Tree, parse_competition, parse_match
+from app.fpf_parser import FPFHTMLInvalid, Tree, parse_competition, parse_match, parse_fixture, bind_fixture
 from app.fpf_source import FPFClient, FPFSourceUnavailable
 from app.fpf_sync import apply_fpf, prepare_fpf
 from app.schemas import InputModel
+from app.models import Season
 
 Positive = Annotated[int, Field(strict=True, gt=0, le=2_147_483_647)]
 HTML = Annotated[str, Field(min_length=1, max_length=2_000_000)]
+
+
+class FPFFixtureCapture(InputModel):
+    html: HTML
+    source_url: Annotated[str, Field(min_length=1, max_length=500)]
+    competition_id: Positive
+    season_id: Positive
+    series_id: Positive
 
 
 class FPFCapture(InputModel):
     competition_html: HTML | None = None
     series_id: Positive
     team_mapping: dict[str, Positive] = Field(min_length=2, max_length=64)
+    fixture_htmls: list[HTML | FPFFixtureCapture] = Field(default_factory=list, max_length=8)
     match_htmls: list[HTML] = Field(default_factory=list, max_length=8)
     match_rounds: dict[str, Positive] = Field(default_factory=dict, max_length=64)
     internal_match_links: dict[str, Positive] = Field(default_factory=dict, max_length=64)
@@ -29,7 +39,10 @@ class FPFCapture(InputModel):
 
     @model_validator(mode="after")
     def bounded_html(self):
-        sizes = [len(html.encode("utf-8")) for html in [self.competition_html, *self.match_htmls] if html is not None]
+        if len(self.match_htmls) + len(self.fixture_htmls) + (self.competition_html is not None) > 9:
+            raise ValueError("Máximo nove ficheiros por lote.")
+        sizes = [len((html.html if isinstance(html, FPFFixtureCapture) else html).encode("utf-8"))
+                 for html in [self.competition_html, *self.match_htmls, *self.fixture_htmls] if html is not None]
         if any(size > 2_000_000 for size in sizes) or sum(sizes) > 4_000_000:
             raise ValueError("Máximo 2 MB por ficheiro HTML e 4 MB por lote.")
         return self
@@ -46,6 +59,7 @@ class FPFRefresh(InputModel):
 class FPFDocument(InputModel):
     name: Annotated[str, Field(min_length=1, max_length=160)]
     html: HTML
+    source_url: Annotated[str, Field(max_length=500)] | None = None
 
 
 class FPFDocuments(InputModel):
@@ -65,35 +79,58 @@ Database = Annotated[Session, Depends(get_db)]
 
 @router.post("/competitions/{competition_id}/fpf/documents", dependencies=[Depends(require_admin)])
 def inspect_documents(competition_id: int, payload: FPFDocuments, db: Database):
-    get_competition(db, competition_id)
+    competition = get_competition(db, competition_id)
     if sum(len(file.html.encode("utf-8")) for file in payload.files) > 4_000_000:
         raise HTTPException(422, "O lote HTML excede 4 MB.")
     documents = []
     seen = set()
+    contexts = []
+    for file in payload.files:
+        try:
+            contexts.append(parse_competition(file.html))
+        except FPFHTMLInvalid:
+            pass
+    document = contexts[0] if len(contexts) == 1 else (competition.fpf_data or {}).get("competition") if not contexts else None
+    if document:
+        season = db.get(Season, competition.season_id)
+        if document["season"] != f"{season.starts_on.year}-{season.ends_on.year}":
+            document = None
+        old = competition.fpf_data
+        if old and document and (document["competition_id"], document["season_id"]) != tuple(old["identity"][:2]):
+            document = None
     for file in payload.files:
         try:
             if not file.name.lower().endswith((".html", ".htm")):
                 raise FPFHTMLInvalid("Selecione ficheiros HTML.")
             root = Tree(file.html).root
             urls = [n.attrs.get("content", "") for n in root.all(tag="meta") if n.attrs.get("property") == "og:url"]
-            if any("/Competition/Details?" in url for url in urls):
+            if file.source_url:
+                kind, data = "fixture", parse_fixture(file.html, source_url=file.source_url)
+                if document is None:
+                    raise FPFHTMLInvalid("Importe ou selecione uma captura válida da competição para validar a origem da jornada.")
+                context = bind_fixture(document, data, (competition.fpf_data or {}).get("identity", [None, None, None])[2] if not contexts else None)
+                data.update(context, source_url=file.source_url)
+                data["matches"] = [{**game, "matchday": context["matchday"]} for game in data["matches"]]
+            elif any("/Competition/Details?" in url for url in urls):
                 kind, data = "competition", parse_competition(file.html)
             elif any("/Match/GetMatchInformation?" in url for url in urls):
                 kind, data = "match", parse_match(file.html)
+            elif any("/Competition/GetClassificationAndMatchesByFixture?" in url for url in urls):
+                kind, data = "fixture", parse_fixture(file.html)
             elif root.all(id="classification") and root.all(id="matches"):
                 documents.append(dict(name=file.name, kind="fixture", supported=False, data=None,
-                    error="Jornada identificada; formato AJAX ainda não validado. Não será importada."))
+                    error="Fragmento de jornada: indique o URL de origem e valide com a captura da competição. Não será importado sem associação confirmada."))
                 continue
             else:
                 raise FPFHTMLInvalid("Documento desconhecido ou página de indisponibilidade; não importar.")
-            identity = (kind, data.get("match_id") if kind == "match" else (data["competition_id"], data["season_id"]))
+            identity = (kind, data["fixture_id"] if kind == "fixture" else data.get("match_id") if kind == "match" else (data["competition_id"], data["season_id"]))
             if identity in seen:
                 raise FPFHTMLInvalid("Documento repetido no lote.")
             seen.add(identity)
             documents.append(dict(name=file.name, kind=kind, supported=True, data=data, error=None))
-        except (FPFHTMLInvalid, ValueError):
+        except (FPFHTMLInvalid, ValueError) as error:
             documents.append(dict(name=file.name, kind="invalid", supported=False, data=None,
-                                  error="HTML inválido, identidade contraditória ou estrutura não suportada."))
+                                  error=str(error) if isinstance(error, FPFHTMLInvalid) else "HTML inválido, identidade contraditória ou estrutura não suportada."))
     return dict(documents=documents)
 
 

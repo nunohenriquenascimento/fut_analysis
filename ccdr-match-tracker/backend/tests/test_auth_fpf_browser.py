@@ -22,6 +22,7 @@ from app.main import app
 from app.fpf_parser import parse_competition
 from app.models import Competition, CompetitionFixture, CompetitionTeam, Match, MatchEvent, MatchSquad, Player, Season, Team, User
 from test_auth import PASSWORD, password_hash  # noqa: F401
+from fpf_calendar_data import calendar_data, SOURCES
 
 
 @pytest.mark.skipif(os.getenv("RUN_LIVE_BROWSER_E2E") != "1", reason="Real browser requires test-only opt-in and frontend build")
@@ -96,11 +97,14 @@ def test_real_fpf_upload_mapping_confirmation_and_internal_preservation(postgres
         result = subprocess.run([node, "-"], input=(backend / "tests/fpf_browser.cjs").read_text(encoding="utf-8"),
             cwd=frontend, capture_output=True, text=True, encoding="utf-8", timeout=120,
             env={**os.environ, "BROWSER_ORIGIN": origin, "BROWSER_WIDTH": str(width), "BROWSER_PASSWORD": PASSWORD,
-                 "BROWSER_COMPETITION_ID": str(cid), "BROWSER_MATCH_ID": str(mid), "BROWSER_TEAM_MAP": json.dumps(mapping), "FPF_FIXTURES": str(captures)})
+                 "BROWSER_COMPETITION_ID": str(cid), "BROWSER_MATCH_ID": str(mid), "BROWSER_TEAM_MAP": json.dumps(mapping), "FPF_FIXTURES": str(captures),
+                 "BROWSER_CALENDAR_SOURCES": json.dumps([dict(file=name, fixture_id=fid,
+                     url=f"https://resultados.fpf.pt/Competition/GetClassificationAndMatchesByFixture?fixtureId={fid}")
+                     for fid,name in SOURCES.items()]), "BROWSER_CALENDAR_GAMES": json.dumps(calendar_data()[1])})
         assert result.returncode == 0, result.stdout + result.stderr
         assert fingerprint() == before
         with Session(engine) as db:
-            assert db.scalar(select(func.count()).select_from(CompetitionFixture)) == 4
+            assert db.scalar(select(func.count()).select_from(CompetitionFixture)) == 56
             assert db.get(Competition, cid).fpf_data["mode"] == "captured_html"
     finally:
         if process is not None:

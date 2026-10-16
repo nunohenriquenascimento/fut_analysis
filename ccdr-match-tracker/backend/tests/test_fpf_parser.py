@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.fpf_parser import FPFHTMLInvalid, Tree, parse_competition, parse_match
+from app.fpf_parser import FPFHTMLInvalid, Tree, parse_competition, parse_match, parse_fixture
 
 FIXTURES = Path(__file__).parent / "fixtures/fpf"
 
@@ -121,3 +121,16 @@ def test_absent_lineup_is_distinguished_from_an_empty_reported_roster(match_html
     parsed = parse_match(match_html.replace('Equipas Iniciais', 'Unavailable lineup'))
     assert parsed["availability"]["starters"] is False
     assert parsed["lineups"]["home"]["starters"] == []
+
+
+def test_round_result_wrapped_in_match_link_requires_fpf_identity():
+    html = '''<meta property="og:url" content="https://resultados.fpf.pt/Competition/GetClassificationAndMatchesByFixture?fixtureId=677922">
+    <div id="matches"><a class="game-link" href="/Match/GetMatchInformation?matchId=2682548">
+    <div class="game"><div class="home-team">Seia Fc</div><div class="text-center">2 - 1</div>
+    <div class="away-team">V. Cortez Mondego-Guarda</div></div></a></div>'''
+    game, = parse_fixture(html)["matches"]
+    assert (game["match_id"], game["home_goals"], game["away_goals"]) == (2682548, 2, 1)
+    with pytest.raises(FPFHTMLInvalid):
+        parse_fixture(html.replace("/Match/GetMatchInformation?matchId=2682548", "/unknown"))
+    with pytest.raises(FPFHTMLInvalid):
+        parse_fixture(html.replace('2 - 1', 'Adiado'))

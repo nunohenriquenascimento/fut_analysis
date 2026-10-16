@@ -102,6 +102,87 @@ def canonical(root, path, fields):
     return identity_url(meta.attrs.get("content", ""), path, fields)
 
 
+def fixture_source(url):
+    try:
+        split = urlsplit(url)
+    except ValueError:
+        raise FPFHTMLInvalid("URL de origem da jornada inválido.") from None
+    query = parse_qs(split.query, keep_blank_values=True)
+    if (split.scheme != "https" or split.netloc != "resultados.fpf.pt" or split.fragment
+            or set(query) != {"fixtureId"} or len(query["fixtureId"]) != 1):
+        raise FPFHTMLInvalid("URL de origem da jornada inválido.")
+    return identity_url(url, "/Competition/GetClassificationAndMatchesByFixture", ["fixtureId"])["fixtureId"]
+
+
+def bind_fixture(document, fixture, series_id=None):
+    candidates = [(series, r) for series in document["series"] for r in series["rounds"]
+                  if r["fixture_id"] == fixture["fixture_id"] and (series_id is None or series["series_id"] == series_id)]
+    series, round_info = one(candidates, "associação entre origem, competição, época, série e jornada")
+    expected = {r["name"] for r in series["standings"]}
+    observed = [name for game in fixture["matches"] for name in (game["home_name"], game["away_name"])]
+    if set(observed) != expected or len(observed) != len(expected):
+        raise FPFHTMLInvalid("A jornada tem de conter exatamente um jogo por equipa da série confirmada.")
+    return dict(competition_id=document["competition_id"], season_id=document["season_id"],
+                series_id=series["series_id"], matchday=round_info["matchday"])
+
+
+def parse_games(root, names, fixture_id, matchday):
+    rows = [{"name": name} for name in names]
+    matches = []
+    for game in one(root.all(id="matches"), "jogos").all(cls="game"):
+        home = one(game.all(cls="home-team"), "casa").text()
+        away = one(game.all(cls="away-team"), "fora").text()
+        if home not in {r["name"] for r in rows} or away not in {r["name"] for r in rows} or home == away:
+            raise FPFHTMLInvalid("Participantes do jogo inválidos.")
+        links = [game, *game.all(tag="a")]
+        if game.parent.tag == "a" and len(game.parent.all(cls="game")) == 1:
+            links.append(game.parent)
+        ids = {identity_url(n.attrs["href"], "/Match/GetMatchInformation", ["matchId"])["matchId"]
+               for n in links if "/Match/GetMatchInformation?" in n.attrs.get("href", "")}
+        if len(ids) > 1:
+            raise FPFHTMLInvalid("Identificadores contraditórios no jogo.")
+        schedule = game.all(cls="game-schedule")
+        scores = game.all(cls="score")
+        score_nodes = [n for score in scores for n in score.children if isinstance(n, Node)
+                       and not n.has("game-schedule") and re.fullmatch(r"[0-9]{1,3}\s*[-–]\s*[0-9]{1,3}", n.text())]
+        if not scores:
+            score_nodes = [n for n in game.all(cls="text-center")
+                       if re.fullmatch(r"[0-9]{1,3}\s*[-–]\s*[0-9]{1,3}", n.text())]
+        if len(schedule) > 1 or (schedule and score_nodes and not scores):
+            raise FPFHTMLInvalid("Jogo com horário e resultado contraditórios.")
+        if (scores and len(score_nodes) != 1) or len(score_nodes) > 1 or (score_nodes and not ids):
+            raise FPFHTMLInvalid("Resultado sem ID FPF ou formato não suportado.")
+        if not score_nodes and len(schedule) != 1:
+            raise FPFHTMLInvalid("Resultado sem ID FPF ou formato não suportado.")
+        goals = re.split(r"\s*[-–]\s*", score_nodes[0].text()) if score_nodes else None
+        siblings = game.parent.children
+        index = siblings.index(game)
+        stadium = next((s.text() for s in siblings[index + 1:] if isinstance(s, Node)), None)
+        next_node = next((s for s in siblings[index + 1:] if isinstance(s, Node)), None)
+        stadium = stadium if next_node is not None and next_node.has("game-list-stadium") else None
+        matches.append(dict(home_name=home, away_name=away, home_goals=int(goals[0]) if goals else None, away_goals=int(goals[1]) if goals else None,
+                            schedule_text=(schedule[0].text() or None) if schedule else None, venue=stadium,
+                            match_id=next(iter(ids), None), fixture_id=fixture_id, matchday=matchday))
+    return matches
+
+
+def parse_fixture(html, *, source_url=None):
+    root = Tree(html).root
+    meta = [n for n in root.all(tag="meta") if n.attrs.get("property") == "og:url"]
+    if source_url is None:
+        fixture_id = canonical(root, "/Competition/GetClassificationAndMatchesByFixture", ["fixtureId"])["fixtureId"]
+    else:
+        fixture_id = fixture_source(source_url)
+        if meta and canonical(root, "/Competition/GetClassificationAndMatchesByFixture", ["fixtureId"])["fixtureId"] != fixture_id:
+            raise FPFHTMLInvalid("URL declarado contradiz a identidade da jornada no HTML.")
+        one(root.all(id="classification"), "classificação da jornada")
+    games = one(root.all(id="matches"), "jogos")
+    names = [n.text() for n in games.all(cls="home-team") + games.all(cls="away-team")]
+    if not names or len(names) != len(set(names)):
+        raise FPFHTMLInvalid("Jornada vazia ou participantes repetidos.")
+    return dict(fixture_id=fixture_id, matches=parse_games(root, names, fixture_id, None))
+
+
 def parse_competition(html):
     root = Tree(html).root
     ids = canonical(root, "/Competition/Details", ["competitionId", "seasonId"])
@@ -142,24 +223,7 @@ def parse_competition(html):
         if len({r["fixture_id"] for r in rounds}) != len(rounds) or len({r["matchday"] for r in rounds}) != len(rounds):
             raise FPFHTMLInvalid("Jornadas repetidas.")
         current = one([r for r in rounds if r["current"]], "jornada atual")
-        matches = []
-        for game in one(section.all(id="matches"), "jogos").all(cls="game"):
-            home = one(game.all(cls="home-team"), "casa").text()
-            away = one(game.all(cls="away-team"), "fora").text()
-            if home not in {r["name"] for r in rows} or away not in {r["name"] for r in rows} or home == away:
-                raise FPFHTMLInvalid("Participantes do jogo inválidos.")
-            schedule = game.all(cls="game-schedule")
-            # This capture contains scheduled games only. Do not invent a score selector.
-            if len(schedule) != 1:
-                raise FPFHTMLInvalid("Formato de resultado no calendário ainda não verificado.")
-            siblings = game.parent.children
-            index = siblings.index(game)
-            stadium = next((s.text() for s in siblings[index + 1:] if isinstance(s, Node)), None)
-            next_node = next((s for s in siblings[index + 1:] if isinstance(s, Node)), None)
-            stadium = stadium if next_node is not None and next_node.has("game-list-stadium") else None
-            matches.append(dict(home_name=home, away_name=away, home_goals=None, away_goals=None,
-                                schedule_text=schedule[0].text() or None, venue=stadium,
-                                match_id=None, fixture_id=current["fixture_id"], matchday=current["matchday"]))
+        matches = parse_games(section, {r["name"] for r in rows}, current["fixture_id"], current["matchday"])
         series.append(dict(series_id=int(series_match[1]), standings=rows, rounds=rounds, matches=matches))
     if not series or set(discover_fixture_ids(html)) != {r["fixture_id"] for s in series for r in s["rounds"]}:
         raise FPFHTMLInvalid("Séries/jornadas incompletas.")

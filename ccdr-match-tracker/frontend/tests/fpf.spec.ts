@@ -141,3 +141,28 @@ test("FPF resposta inicial tardia não repõe os mapeamentos já revistos", asyn
   await expect(page.getByRole("region", { name: "Revisão FPF" })).toBeVisible();
   await expect(page.getByRole("combobox", { name: `Equipa FPF: ${teams[0].name}`, exact: true })).toHaveValue(String(teams[0].id));
 });
+
+for (const stage of ["preview", "apply"]) test(`FPF explica conflito de resultados no ${stage} sem aplicar capturas`, async ({ page }) => {
+  const state = await mock(page, "ADMIN", true);
+  const detail = { code: "FPF_RESULT_CONFLICT", message: "Resultados FPF contraditórios no mesmo lote. Nenhuma alteração aplicada.",
+    conflicts: [{ match_id: 2682548, sources: [
+      { source: "fixture_htmls[0]:677922", home_goals: 9, away_goals: 0 },
+      { source: "match_htmls[0]:2682548", home_goals: 2, away_goals: 1 },
+    ], persisted: [] }] };
+  await page.route(`http://localhost:8000/competitions/1/fpf${stage === "preview" ? "/preview" : ""}`, (route) =>
+    stage === "apply" && route.request().method() !== "PUT" ? route.fallback() : route.fulfill({ status: 409, json: { detail } }));
+  await page.goto("/competitions/1/fpf"); await selectCaptures(page);
+  await page.getByRole("button", { name: "Rever diferenças e ligações" }).click();
+  if (stage === "apply") {
+    await page.getByLabel("Escreva SINCRONIZAR FPF para confirmar").fill("SINCRONIZAR FPF");
+    await page.getByRole("button", { name: "Confirmar importação FPF" }).click();
+  }
+  const error = page.getByRole("main").getByRole("alert");
+  await expect(error).toContainText("Jogo FPF #2682548");
+  await expect(error).toContainText("9–0"); await expect(error).toContainText("2–1");
+  await expect(error).toContainText("Página de jornada #677922 (ficheiro 1)");
+  await expect(error).toContainText("Ficha individual #2682548 (ficheiro 1)");
+  await expect(page.getByRole("button", { name: "Confirmar importação FPF" })).toHaveCount(0);
+  expect(state.applies).toBe(0);
+  await expect(page.getByRole("region", { name: "Classificação oficial FPF" }).locator("tbody tr")).toHaveCount(8);
+});
