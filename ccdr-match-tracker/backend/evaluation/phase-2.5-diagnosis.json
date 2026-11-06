@@ -1,0 +1,52 @@
+{
+  "phase": "2.5",
+  "status": "blocked_ollama_unreachable",
+  "checked_at_utc": "2026-11-06T15:51:43Z",
+  "execution_environment": {
+    "system": "Darwin",
+    "release": "25.5.0",
+    "architecture": "x86_64",
+    "wsl_marker": false,
+    "docker_marker": false,
+    "ssh_marker": false,
+    "remote_container_marker": false,
+    "same_host_as_user_vscode": "not_established"
+  },
+  "ollama": {
+    "cli_on_path": false,
+    "common_macos_installation_paths_present": false,
+    "process_detected": false,
+    "tcp_listener_11434_detected": false,
+    "probed_origins": ["http://localhost:11434", "http://127.0.0.1:11434", "http://[::1]:11434"],
+    "probed_paths": ["/api/version", "/api/tags", "/api/ps"],
+    "http_results": "All nine GET requests failed with ConnectError outside the sandbox",
+    "tcp_ipv4_ipv6_result": "ECONNREFUSED (Darwin errno 61)",
+    "version": null,
+    "installed_models": null
+  },
+  "effective_backend_configuration": {
+    "base_url": "http://localhost:11434",
+    "model": "qwen3:8b",
+    "think": false,
+    "timeout_seconds": 180.0,
+    "connect_timeout_seconds": 5.0,
+    "max_response_bytes": 1048576,
+    "existing_real_benchmark_budget_seconds": 60
+  },
+  "real_validation": {
+    "compatibility_test_executed": false,
+    "benchmark_executed": false,
+    "questions_evaluated": 0,
+    "model_requests": 0,
+    "tool_calls": 0,
+    "tool_selection_rate": null,
+    "rendered_fact_fidelity": null,
+    "median_latency_ms": null,
+    "p95_latency_ms": null,
+    "inference_timeouts": null,
+    "protocol_errors": null,
+    "memory_bytes": null
+  },
+  "actions_not_taken": ["No model download", "No service started", "No PostgreSQL started", "No production access", "No migrations", "No simulated benchmark substituted for real results"],
+  "fastapi_decision": "Do not advance on the basis of phase 2.5; real validation remains outstanding"
+}

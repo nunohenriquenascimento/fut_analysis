@@ -1,0 +1,166 @@
+[
+  {
+    "case": "resultado",
+    "mode": "simulated",
+    "reference": {
+      "golos marcados": 3,
+      "golos sofridos": 2
+    },
+    "assessment": {
+      "correct": 2,
+      "incorrect": 0,
+      "missing": [],
+      "review_sentences": [],
+      "limitations_present": true,
+      "portuguese_structure": true
+    },
+    "metadata": {
+      "execution_id": "4785afa5-4156-433a-8078-a5bcd47e26ed",
+      "started_at": "2026-11-06T15:48:07.091650Z",
+      "duration_ms": 28.557413001180976,
+      "rounds_used": 1,
+      "calls_used": 1,
+      "model_requests": 2
+    }
+  },
+  {
+    "case": "golos",
+    "mode": "simulated",
+    "reference": {
+      "golos marcados": 3,
+      "golos sofridos": 2
+    },
+    "assessment": {
+      "correct": 2,
+      "incorrect": 0,
+      "missing": [],
+      "review_sentences": [],
+      "limitations_present": true,
+      "portuguese_structure": true
+    },
+    "metadata": {
+      "execution_id": "4fbb7998-0089-48ad-bfc9-08609fd99294",
+      "started_at": "2026-11-06T15:48:07.121581Z",
+      "duration_ms": 25.15666900035285,
+      "rounds_used": 1,
+      "calls_used": 1,
+      "model_requests": 2
+    }
+  },
+  {
+    "case": "autogolos",
+    "mode": "simulated",
+    "reference": {
+      "autogolos da equipa": 1
+    },
+    "assessment": {
+      "correct": 1,
+      "incorrect": 0,
+      "missing": [],
+      "review_sentences": [],
+      "limitations_present": true,
+      "portuguese_structure": true
+    },
+    "metadata": {
+      "execution_id": "5f679902-b2a2-44ac-8c3e-0010301134ed",
+      "started_at": "2026-11-06T15:48:07.148318Z",
+      "duration_ms": 27.38093700099853,
+      "rounds_used": 1,
+      "calls_used": 1,
+      "model_requests": 2
+    }
+  },
+  {
+    "case": "cartões",
+    "mode": "simulated",
+    "reference": {
+      "amarelos da equipa": 2,
+      "vermelhos da equipa": 1
+    },
+    "assessment": {
+      "correct": 2,
+      "incorrect": 0,
+      "missing": [],
+      "review_sentences": [],
+      "limitations_present": true,
+      "portuguese_structure": true
+    },
+    "metadata": {
+      "execution_id": "c082d369-8409-4235-9733-aca9eec500c1",
+      "started_at": "2026-11-06T15:48:07.176854Z",
+      "duration_ms": 24.491174999639043,
+      "rounds_used": 1,
+      "calls_used": 1,
+      "model_requests": 2
+    }
+  },
+  {
+    "case": "substituições",
+    "mode": "simulated",
+    "reference": {
+      "substituições da equipa": 1
+    },
+    "assessment": {
+      "correct": 1,
+      "incorrect": 0,
+      "missing": [],
+      "review_sentences": [],
+      "limitations_present": true,
+      "portuguese_structure": true
+    },
+    "metadata": {
+      "execution_id": "0d379143-5212-4d0f-af38-e387da9e23d3",
+      "started_at": "2026-11-06T15:48:07.202692Z",
+      "duration_ms": 22.556492998774047,
+      "rounds_used": 1,
+      "calls_used": 1,
+      "model_requests": 2
+    }
+  },
+  {
+    "case": "cantos",
+    "mode": "simulated",
+    "reference": {
+      "cantos da equipa": 4
+    },
+    "assessment": {
+      "correct": 1,
+      "incorrect": 0,
+      "missing": [],
+      "review_sentences": [],
+      "limitations_present": true,
+      "portuguese_structure": true
+    },
+    "metadata": {
+      "execution_id": "f8d23226-6681-4288-8055-a110db54e4a5",
+      "started_at": "2026-11-06T15:48:07.226491Z",
+      "duration_ms": 24.54701299939188,
+      "rounds_used": 1,
+      "calls_used": 1,
+      "model_requests": 2
+    }
+  },
+  {
+    "case": "sem_eventos",
+    "mode": "simulated",
+    "reference": {
+      "eventos registados": 0
+    },
+    "assessment": {
+      "correct": 1,
+      "incorrect": 0,
+      "missing": [],
+      "review_sentences": [],
+      "limitations_present": true,
+      "portuguese_structure": true
+    },
+    "metadata": {
+      "execution_id": "8087c9d1-e030-4ebb-bee1-c3a1d9d0dcef",
+      "started_at": "2026-11-06T15:48:07.252201Z",
+      "duration_ms": 22.867102999953204,
+      "rounds_used": 1,
+      "calls_used": 1,
+      "model_requests": 2
+    }
+  }
+]
