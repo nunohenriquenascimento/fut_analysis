@@ -1,0 +1,244 @@
+{
+  "schema_version": "1.0",
+  "source_system": "match_tracker",
+  "source_instance_id": "fictional-export-test",
+  "exported_at": "2026-11-09T10:00:00Z",
+  "selection": {
+    "team_id": "42",
+    "season_id": "7",
+    "competition_scope": "all",
+    "competition_id": null,
+    "as_of": "2026-11-09T10:00:00Z",
+    "limit": 5,
+    "returned_count": 2,
+    "order": "kickoff_at_desc_source_match_id_numeric_desc"
+  },
+  "matches": [
+    {
+      "source_match_id": "10",
+      "team_id": "42",
+      "season_id": "7",
+      "competition_id": "3",
+      "kickoff_at": "2026-11-08T15:00:00Z",
+      "timezone": "Europe/Lisbon",
+      "status": "FINISHED",
+      "home_team": {
+        "team_id": "42",
+        "name": "Equipa Fictícia A"
+      },
+      "away_team": {
+        "team_id": "55",
+        "name": "Equipa Fictícia B"
+      },
+      "score": {
+        "home_goals": 2,
+        "away_goals": 1,
+        "status": "unverified",
+        "provenance": {
+          "method": "events",
+          "reference_ids": [
+            "event:100",
+            "event:101",
+            "event:102"
+          ],
+          "verified_at": null
+        }
+      },
+      "events": [
+        {
+          "source_event_id": "100",
+          "source_match_id": "10",
+          "event_type": "GOAL",
+          "team_id": "42",
+          "period": 1,
+          "elapsed_seconds": 600,
+          "minute": 10,
+          "player": {
+            "source_player_id": "70",
+            "team_id": "42",
+            "season_id": "7",
+            "name": "Jogador Fictício"
+          },
+          "related_player": null
+        },
+        {
+          "source_event_id": "101",
+          "source_match_id": "10",
+          "event_type": "OWN_GOAL",
+          "team_id": "55",
+          "period": 1,
+          "elapsed_seconds": 800,
+          "minute": 13,
+          "player": null,
+          "related_player": null
+        },
+        {
+          "source_event_id": "102",
+          "source_match_id": "10",
+          "event_type": "OWN_GOAL",
+          "team_id": "42",
+          "period": 1,
+          "elapsed_seconds": 900,
+          "minute": 15,
+          "player": null,
+          "related_player": null
+        }
+      ],
+      "squad": [
+        {
+          "source_squad_id": "80",
+          "player": {
+            "source_player_id": "70",
+            "team_id": "42",
+            "season_id": "7",
+            "name": "Jogador Fictício"
+          },
+          "is_starter": true
+        }
+      ],
+      "quality": {
+        "score_events": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "shots": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "cards": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "substitutions": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "other_events": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "player_attribution": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "squad": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        }
+      },
+      "updated_at": null,
+      "source_reference": {
+        "resource": "internal_match",
+        "id": "10"
+      },
+      "external_references": [
+        {
+          "resource": "competition_fixture",
+          "id": "20"
+        }
+      ],
+      "data_version": "sha256:e90d8f949afcef6a295197f8c41f8d4d240ce6c42b5c1897b335e0c2aa414572"
+    },
+    {
+      "source_match_id": "9",
+      "team_id": "42",
+      "season_id": "7",
+      "competition_id": null,
+      "kickoff_at": "2026-11-08T15:00:00Z",
+      "timezone": "Europe/Lisbon",
+      "status": "FINISHED",
+      "home_team": {
+        "team_id": "55",
+        "name": "Equipa Fictícia B"
+      },
+      "away_team": {
+        "team_id": "42",
+        "name": "Equipa Fictícia A"
+      },
+      "score": {
+        "home_goals": 1,
+        "away_goals": 0,
+        "status": "unverified",
+        "provenance": {
+          "method": "events",
+          "reference_ids": [
+            "event:103"
+          ],
+          "verified_at": null
+        }
+      },
+      "events": [
+        {
+          "source_event_id": "103",
+          "source_match_id": "9",
+          "event_type": "GOAL",
+          "team_id": "55",
+          "period": 1,
+          "elapsed_seconds": 600,
+          "minute": 10,
+          "player": null,
+          "related_player": null
+        }
+      ],
+      "squad": null,
+      "quality": {
+        "score_events": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "shots": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "cards": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "substitutions": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "other_events": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "player_attribution": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        },
+        "squad": {
+          "status": "unknown",
+          "evidence": null,
+          "assessed_at": null
+        }
+      },
+      "updated_at": null,
+      "source_reference": {
+        "resource": "internal_match",
+        "id": "9"
+      },
+      "external_references": [],
+      "data_version": "sha256:ed24104b80cc7f910163a66b974bcd5fc778ffc959802ab3787bd31207a1a0be"
+    }
+  ],
+  "authorized_scope": {
+    "scope_id": "fictional-test-scope",
+    "club_id": "fictional-test-club",
+    "team_id": "42",
+    "permission": "matches:export"
+  },
+  "snapshot_version": "sha256:1c18999a6fcefa6f00eeb671c8714316e478c55deb3ec4991e0c9ea903b3ef39"
+}
