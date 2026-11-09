@@ -83,7 +83,7 @@ def migrated_engine() -> Iterator[Engine]:
         # DATABASE_URL só é definido no subprocesso Alembic e recebe o URL validado.
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=Path(__file__).resolve().parents[1],
+            cwd=Path(__file__).resolve().parent,
             env={**os.environ, "DATABASE_URL": url, "APP_ENV": "development"},
             capture_output=True,
             text=True,
